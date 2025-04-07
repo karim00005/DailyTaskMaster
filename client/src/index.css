@@ -2,12 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap');
+
 @layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    direction: rtl;
+  }
+
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Cairo', sans-serif;
   }
 }
