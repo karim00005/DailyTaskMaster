@@ -134,12 +134,15 @@ export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   transactionNumber: text("transaction_number").notNull().unique(),
   transactionType: text("transaction_type").notNull(),
+  type: text("type").notNull().default("صرف"), // صرف أو قبض
   clientId: integer("client_id").references(() => clients.id, { onDelete: "restrict" }),
   invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
   userId: integer("user_id").references(() => users.id, { onDelete: "restrict" }),
   date: date("date").notNull(),
   amount: numeric("amount").notNull().default("0"),
   paymentMethod: text("payment_method").notNull().default("cash"),
+  referenceNumber: text("reference_number"),
+  description: text("description"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -166,14 +169,22 @@ export const settings = pgTable("settings", {
   companyAddress: text("company_address"),
   companyPhone: text("company_phone"),
   companyEmail: text("company_email"),
+  companyWebsite: text("company_website"),
   taxId: text("tax_id"),
+  taxNumber: text("tax_number"),
   logo: text("logo"),
   currency: text("currency").notNull().default("EGP"),
+  defaultCurrency: text("default_currency").notNull().default("EGP"),
   taxPercent: numeric("tax_percent").notNull().default("0"),
   invoiceNotes: text("invoice_notes"),
   receiptNotes: text("receipt_notes"),
   defaultInvoiceStatus: text("default_invoice_status").notNull().default("pending"),
   defaultPaymentMethod: text("default_payment_method").notNull().default("cash"),
+  defaultLanguage: text("default_language").notNull().default("ar"),
+  rtlMode: boolean("rtl_mode").notNull().default(true),
+  darkMode: boolean("dark_mode").notNull().default(false),
+  enableNotifications: boolean("enable_notifications").notNull().default(true),
+  autoBackup: boolean("auto_backup").notNull().default(false),
 });
 
 // Schema for inserts
