@@ -268,14 +268,53 @@ export class DatabaseStorage implements IStorage {
       // Create the invoice
       const [invoice] = await tx.insert(invoices).values(invoiceData).returning();
       
-      // Create all invoice items
+      // Create all invoice items and update product stock
       if (items.length > 0) {
+        // Insert invoice items
         await tx.insert(invoiceItems).values(
           items.map(item => ({
             ...item,
             invoiceId: invoice.id
           }))
         );
+        
+        // Update product stock for each item
+        for (const item of items) {
+          if (item.productId) {
+            // Get the current product
+            const [product] = await tx.select()
+              .from(products)
+              .where(eq(products.id, item.productId));
+              
+            if (product) {
+              let newStock: string;
+              
+              // For sales invoices, decrease stock
+              if (invoiceData.invoiceType === 'فاتورة بيع') {
+                // Convert to numbers for calculation then back to string
+                const currentStock = parseFloat(product.currentStock);
+                const itemQuantity = parseFloat(item.quantity.toString());
+                newStock = (currentStock - itemQuantity).toString();
+              } 
+              // For purchase invoices, increase stock
+              else if (invoiceData.invoiceType === 'فاتورة شراء') {
+                // Convert to numbers for calculation then back to string
+                const currentStock = parseFloat(product.currentStock);
+                const itemQuantity = parseFloat(item.quantity.toString());
+                newStock = (currentStock + itemQuantity).toString();
+              }
+              // For other invoice types, don't change stock
+              else {
+                continue;
+              }
+              
+              // Update the product stock
+              await tx.update(products)
+                .set({ currentStock: newStock })
+                .where(eq(products.id, item.productId));
+            }
+          }
+        }
       }
       
       return invoice;
@@ -292,12 +331,62 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteInvoice(id: number): Promise<boolean> {
-    // First delete related invoice items (but they should cascade delete)
-    await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
-    
-    // Then delete the invoice
-    const result = await db.delete(invoices).where(eq(invoices.id, id)).returning();
-    return result.length > 0;
+    return await db.transaction(async (tx) => {
+      // Get the invoice to determine type
+      const [invoice] = await tx.select()
+        .from(invoices)
+        .where(eq(invoices.id, id));
+      
+      if (!invoice) {
+        return false;
+      }
+      
+      // Get all invoice items
+      const items = await tx.select()
+        .from(invoiceItems)
+        .where(eq(invoiceItems.invoiceId, id));
+      
+      // Update product stock for each item
+      for (const item of items) {
+        if (item.productId) {
+          // Get the product
+          const [product] = await tx.select()
+            .from(products)
+            .where(eq(products.id, item.productId));
+            
+          if (product) {
+            const itemQuantity = parseFloat(item.quantity.toString());
+            const currentStock = parseFloat(product.currentStock);
+            let newStock: number;
+            
+            // For sales, add back the quantity (reverse the deduction)
+            if (invoice.invoiceType === 'فاتورة بيع') {
+              newStock = currentStock + itemQuantity;
+            } 
+            // For purchases, subtract the quantity (reverse the addition)
+            else if (invoice.invoiceType === 'فاتورة شراء') {
+              newStock = currentStock - itemQuantity;
+            }
+            // For other invoice types, don't change stock
+            else {
+              continue;
+            }
+            
+            // Update the product stock
+            await tx.update(products)
+              .set({ currentStock: newStock.toString() })
+              .where(eq(products.id, item.productId));
+          }
+        }
+      }
+      
+      // Delete all invoice items
+      await tx.delete(invoiceItems).where(eq(invoiceItems.invoiceId, id));
+      
+      // Delete the invoice
+      const result = await tx.delete(invoices).where(eq(invoices.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   async getAllInvoices(): Promise<Invoice[]> {
@@ -341,17 +430,134 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateInvoiceItem(id: number, itemUpdate: Partial<InsertInvoiceItem>): Promise<InvoiceItem | undefined> {
-    const [item] = await db.update(invoiceItems)
-      .set(itemUpdate)
-      .where(eq(invoiceItems.id, id))
-      .returning();
-    
-    return item;
+    return await db.transaction(async (tx) => {
+      // Get the original item to calculate stock difference
+      const [originalItem] = await tx.select()
+        .from(invoiceItems)
+        .where(eq(invoiceItems.id, id));
+      
+      if (!originalItem) {
+        return undefined;
+      }
+      
+      // Update the invoice item
+      const [updatedItem] = await tx.update(invoiceItems)
+        .set(itemUpdate)
+        .where(eq(invoiceItems.id, id))
+        .returning();
+      
+      // If product ID is the same and quantity is being updated
+      if (originalItem.productId && itemUpdate.quantity !== undefined && 
+          (!itemUpdate.productId || itemUpdate.productId === originalItem.productId)) {
+        
+        // Get the product
+        const [product] = await tx.select()
+          .from(products)
+          .where(eq(products.id, originalItem.productId));
+        
+        if (product) {
+          // Get the invoice to determine if it's a sale or purchase
+          const [invoice] = await tx.select()
+            .from(invoices)
+            .where(eq(invoices.id, originalItem.invoiceId));
+          
+          if (invoice) {
+            // Calculate the difference in quantity
+            const originalQuantity = parseFloat(originalItem.quantity.toString());
+            const newQuantity = parseFloat(itemUpdate.quantity.toString());
+            const quantityDifference = newQuantity - originalQuantity;
+            
+            // Skip if no actual change
+            if (quantityDifference === 0) {
+              return updatedItem;
+            }
+            
+            const currentStock = parseFloat(product.currentStock);
+            let newStock: number;
+            
+            // For sales, decrease stock (increase if quantity is reduced)
+            if (invoice.invoiceType === 'فاتورة بيع') {
+              newStock = currentStock - quantityDifference;
+            } 
+            // For purchases, increase stock (decrease if quantity is reduced)
+            else if (invoice.invoiceType === 'فاتورة شراء') {
+              newStock = currentStock + quantityDifference;
+            }
+            // For other invoice types, don't change stock
+            else {
+              return updatedItem;
+            }
+            
+            // Update the product stock
+            await tx.update(products)
+              .set({ currentStock: newStock.toString() })
+              .where(eq(products.id, originalItem.productId));
+          }
+        }
+      }
+      
+      return updatedItem;
+    });
   }
 
   async deleteInvoiceItem(id: number): Promise<boolean> {
-    const result = await db.delete(invoiceItems).where(eq(invoiceItems.id, id)).returning();
-    return result.length > 0;
+    return await db.transaction(async (tx) => {
+      // Get the item to be deleted
+      const [item] = await tx.select()
+        .from(invoiceItems)
+        .where(eq(invoiceItems.id, id));
+      
+      if (!item || !item.productId) {
+        // Nothing to update, just delete and return
+        const result = await tx.delete(invoiceItems).where(eq(invoiceItems.id, id)).returning();
+        return result.length > 0;
+      }
+      
+      // Get the invoice to determine if it's a sale or purchase
+      const [invoice] = await tx.select()
+        .from(invoices)
+        .where(eq(invoices.id, item.invoiceId));
+      
+      if (!invoice) {
+        // Invoice not found, just delete the item
+        const result = await tx.delete(invoiceItems).where(eq(invoiceItems.id, id)).returning();
+        return result.length > 0;
+      }
+      
+      // Get the product
+      const [product] = await tx.select()
+        .from(products)
+        .where(eq(products.id, item.productId));
+      
+      if (product) {
+        const itemQuantity = parseFloat(item.quantity.toString());
+        const currentStock = parseFloat(product.currentStock);
+        let newStock: number;
+        
+        // For sales, add back the quantity (reverse the deduction)
+        if (invoice.invoiceType === 'فاتورة بيع') {
+          newStock = currentStock + itemQuantity;
+        } 
+        // For purchases, subtract the quantity (reverse the addition)
+        else if (invoice.invoiceType === 'فاتورة شراء') {
+          newStock = currentStock - itemQuantity;
+        }
+        // For other invoice types, don't change stock
+        else {
+          const result = await tx.delete(invoiceItems).where(eq(invoiceItems.id, id)).returning();
+          return result.length > 0;
+        }
+        
+        // Update the product stock
+        await tx.update(products)
+          .set({ currentStock: newStock.toString() })
+          .where(eq(products.id, item.productId));
+      }
+      
+      // Finally delete the item
+      const result = await tx.delete(invoiceItems).where(eq(invoiceItems.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   // Transaction methods
