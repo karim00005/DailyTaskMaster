@@ -28,6 +28,7 @@ import {
   Menu,
   ChevronDown,
 } from "lucide-react";
+import { ThemeToggle, RtlToggle } from "@/components/ui/theme-toggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 interface AppLayoutProps {
@@ -217,14 +218,18 @@ export function AppLayout({ children }: AppLayoutProps) {
               <p className="text-xs text-muted-foreground">{user?.role}</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleLogout}
-            title="تسجيل الخروج"
-          >
-            <LogOut className="h-5 w-5" />
-          </Button>
+          <div className="flex items-center space-x-1">
+            <ThemeToggle />
+            <RtlToggle />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              title="تسجيل الخروج"
+            >
+              <LogOut className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -269,6 +274,23 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <DropdownMenuItem>
                   <User className="h-4 w-4 ml-2" />
                   <span>{user?.fullName}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <div className="flex justify-between items-center cursor-default">
+                    <div className="flex items-center">
+                      <span className="mr-2">الوضع المظلم</span>
+                    </div>
+                    <ThemeToggle />
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <div className="flex justify-between items-center cursor-default">
+                    <div className="flex items-center">
+                      <span className="mr-2">اتجاه النص</span>
+                    </div>
+                    <RtlToggle />
+                  </div>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
