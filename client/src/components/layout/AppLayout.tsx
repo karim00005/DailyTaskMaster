@@ -237,70 +237,77 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar - Now using Sheet like mobile */}
       {!isMobile && (
-        <aside className="hidden md:block w-64 border-l overflow-y-auto">
-          {sidebarContent}
-        </aside>
+        <Sheet>
+          <SheetTrigger asChild className="block md:absolute md:top-4 md:right-4 md:z-10">
+            <Button variant="outline" size="icon" className="ml-4 mt-4">
+              <Menu className="h-5 w-5" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="p-0 w-80">
+            {sidebarContent}
+          </SheetContent>
+        </Sheet>
       )}
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header for mobile */}
-        {isMobile && (
-          <header className="py-2 px-4 border-b flex items-center justify-between">
+        {/* Header for all screens */}
+        <header className="py-2 px-4 border-b flex items-center justify-between">
+          {isMobile ? (
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="p-0 w-64">
+              <SheetContent side="right" className="p-0 w-80">
                 {sidebarContent}
               </SheetContent>
             </Sheet>
+          ) : null}
 
-            <h1 className="text-xl font-bold">نظام إدارة المبيعات</h1>
+          <h1 className="text-xl font-bold">نظام إدارة المبيعات</h1>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    {user?.fullName?.[0] || <User className="h-4 w-4" />}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                  {user?.fullName?.[0] || <User className="h-4 w-4" />}
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem>
+                <User className="h-4 w-4 ml-2" />
+                <span>{user?.fullName}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <div className="flex justify-between items-center cursor-default">
+                  <div className="flex items-center">
+                    <span className="mr-2">الوضع المظلم</span>
                   </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <User className="h-4 w-4 ml-2" />
-                  <span>{user?.fullName}</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <div className="flex justify-between items-center cursor-default">
-                    <div className="flex items-center">
-                      <span className="mr-2">الوضع المظلم</span>
-                    </div>
-                    <ThemeToggle />
+                  <ThemeToggle />
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <div className="flex justify-between items-center cursor-default">
+                  <div className="flex items-center">
+                    <span className="mr-2">اتجاه النص</span>
                   </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <div className="flex justify-between items-center cursor-default">
-                    <div className="flex items-center">
-                      <span className="mr-2">اتجاه النص</span>
-                    </div>
-                    <RtlToggle />
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 ml-2" />
-                  <span>تسجيل الخروج</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </header>
-        )}
+                  <RtlToggle />
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="h-4 w-4 ml-2" />
+                <span>تسجيل الخروج</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </header>
 
         {/* Page content */}
         <div className="flex-1 overflow-y-auto">{children}</div>

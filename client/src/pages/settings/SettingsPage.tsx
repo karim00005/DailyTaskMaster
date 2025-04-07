@@ -29,6 +29,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { 
   Loader2, 
   Save, 
@@ -37,12 +46,225 @@ import {
   Info, 
   Users, 
   Settings, 
-  Database
+  Database,
+  User
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings as SettingsType, Client, Product, Invoice, InvoiceItem, Transaction } from "@shared/schema";
+import { Settings as SettingsType, Client, Product, Invoice, InvoiceItem, Transaction, User as UserType } from "@shared/schema";
 import * as ExcelHelper from "@/lib/excel-helper";
+import { useAuth } from "@/context/AuthContext";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+
+// نموذج تحديث الاسم الكامل
+function UserProfileNameForm() {
+  const { user, isLoading } = useAuth();
+  const { toast } = useToast();
+
+  const formSchema = z.object({
+    fullName: z.string().min(3, {
+      message: "يجب أن يكون الاسم الكامل على الأقل 3 أحرف",
+    }),
+  });
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      fullName: user?.fullName || "",
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async (values: z.infer<typeof formSchema>) => {
+      if (!user) throw new Error("لم يتم تسجيل الدخول");
+      const res = await apiRequest("PATCH", `/api/users/${user.id}`, values);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+      toast({
+        title: "تم تحديث الاسم بنجاح",
+        variant: "default",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ في تحديث الاسم",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    updateUserMutation.mutate(values);
+  }
+
+  if (isLoading) {
+    return <div className="flex items-center space-x-4"><Loader2 className="h-4 w-4 animate-spin" /> جاري التحميل...</div>;
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="fullName"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>الاسم الكامل</FormLabel>
+              <FormControl>
+                <Input placeholder="أدخل الاسم الكامل" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button 
+          type="submit" 
+          disabled={updateUserMutation.isPending}
+        >
+          {updateUserMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+              جاري الحفظ...
+            </>
+          ) : (
+            <>
+              <User className="h-4 w-4 ml-2" />
+              تحديث الاسم
+            </>
+          )}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+
+// نموذج تغيير كلمة المرور
+function UserPasswordChangeForm() {
+  const { user, isLoading } = useAuth();
+  const { toast } = useToast();
+
+  const formSchema = z.object({
+    currentPassword: z.string().min(6, {
+      message: "يجب أن تكون كلمة المرور الحالية على الأقل 6 أحرف",
+    }),
+    newPassword: z.string().min(6, {
+      message: "يجب أن تكون كلمة المرور الجديدة على الأقل 6 أحرف",
+    }),
+    confirmPassword: z.string(),
+  }).refine((data) => data.newPassword === data.confirmPassword, {
+    message: "كلمتا المرور غير متطابقتين",
+    path: ["confirmPassword"],
+  });
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    },
+  });
+
+  const updatePasswordMutation = useMutation({
+    mutationFn: async (values: z.infer<typeof formSchema>) => {
+      if (!user) throw new Error("لم يتم تسجيل الدخول");
+      const res = await apiRequest("PATCH", `/api/users/${user.id}`, {
+        currentPassword: values.currentPassword,
+        password: values.newPassword,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "تم تغيير كلمة المرور بنجاح",
+        variant: "default",
+      });
+      form.reset();
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ في تغيير كلمة المرور",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    updatePasswordMutation.mutate(values);
+  }
+
+  if (isLoading) {
+    return <div className="flex items-center space-x-4"><Loader2 className="h-4 w-4 animate-spin" /> جاري التحميل...</div>;
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="currentPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>كلمة المرور الحالية</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="أدخل كلمة المرور الحالية" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="newPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>كلمة المرور الجديدة</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="أدخل كلمة المرور الجديدة" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>تأكيد كلمة المرور</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="أدخل كلمة المرور الجديدة مرة أخرى" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button 
+          type="submit" 
+          disabled={updatePasswordMutation.isPending}
+        >
+          {updatePasswordMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+              جاري التحديث...
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4 ml-2" />
+              تغيير كلمة المرور
+            </>
+          )}
+        </Button>
+      </form>
+    </Form>
+  );
+}
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
@@ -335,12 +557,25 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col items-center justify-center p-12 text-center space-y-4">
-                <Users className="h-16 w-16 text-muted-foreground" />
-                <h3 className="text-xl font-semibold">ميزة في التطوير</h3>
-                <p className="text-muted-foreground">
-                  سيتم إضافة ميزة إدارة المستخدمين قريباً
-                </p>
+              <div className="space-y-6">
+                <h3 className="text-xl font-semibold">تحديث بيانات المستخدم الحالي</h3>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">تغيير الاسم</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <UserProfileNameForm />
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">تغيير كلمة المرور</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <UserPasswordChangeForm />
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>
