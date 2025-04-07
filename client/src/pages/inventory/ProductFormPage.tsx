@@ -309,7 +309,7 @@ export default function ProductFormPage() {
                           step="1"
                           placeholder="أدخل المخزون الحالي" 
                           {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          onChange={(e) => field.onChange(e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -330,7 +330,7 @@ export default function ProductFormPage() {
                           step="1"
                           placeholder="أدخل الحد الأدنى" 
                           {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          onChange={(e) => field.onChange(e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />

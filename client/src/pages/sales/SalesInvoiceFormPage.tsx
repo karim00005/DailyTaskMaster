@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from "wouter";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
+import { Combobox } from "@/components/ui/combobox";
 import { 
   Card, 
   CardContent, 
@@ -418,24 +419,19 @@ export default function SalesInvoiceFormPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>العميل *</FormLabel>
-                          <Select 
-                            onValueChange={(value) => field.onChange(parseInt(value))}
-                            defaultValue={field.value?.toString()}
-                            value={field.value?.toString()}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="اختر العميل" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {clients?.map(client => (
-                                <SelectItem key={client.id} value={client.id.toString()}>
-                                  {client.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <FormControl>
+                            <Combobox
+                              options={clients?.map(client => ({
+                                value: client.id.toString(),
+                                label: client.name
+                              })) || []}
+                              value={field.value?.toString() || ""}
+                              onChange={(value) => field.onChange(parseInt(value))}
+                              placeholder="اختر العميل"
+                              emptyMessage="لا يوجد عملاء مطابقين"
+                              searchPlaceholder="ابحث عن عميل..."
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -542,24 +538,20 @@ export default function SalesInvoiceFormPage() {
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div className="space-y-2">
                           <Label htmlFor="product">المنتج</Label>
-                          <Select 
-                            onValueChange={(value) => {
+                          <Combobox
+                            options={products?.map(product => ({
+                              value: product.id.toString(),
+                              label: product.name
+                            })) || []}
+                            value={selectedProduct?.id?.toString() || ""}
+                            onChange={(value) => {
                               const product = products?.find(p => p.id === parseInt(value));
                               setSelectedProduct(product || null);
                             }}
-                            value={selectedProduct?.id?.toString()}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="اختر المنتج" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products?.map(product => (
-                                <SelectItem key={product.id} value={product.id.toString()}>
-                                  {product.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            placeholder="اختر المنتج"
+                            emptyMessage="لا توجد منتجات مطابقة"
+                            searchPlaceholder="ابحث عن منتج..."
+                          />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="quantity">الكمية</Label>
