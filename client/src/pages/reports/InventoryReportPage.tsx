@@ -86,8 +86,8 @@ export default function InventoryReportPage() {
     // Filter by stock level
     const matchesStock = 
       stockFilter === "all" ||
-      (stockFilter === "low" && product.currentStock <= product.minStock) ||
-      (stockFilter === "out" && product.currentStock === 0);
+      (stockFilter === "low" && parseFloat(product.currentStock) <= (product.minStock || 0) && parseFloat(product.currentStock) > 0) ||
+      (stockFilter === "out" && parseFloat(product.currentStock) === 0);
     
     return matchesSearch && matchesWarehouse && matchesCategory && matchesStock;
   });
@@ -95,14 +95,14 @@ export default function InventoryReportPage() {
   // Calculate summary statistics
   const totalProducts = filteredProducts?.length || 0;
   const totalStockValue = filteredProducts?.reduce(
-    (sum, product) => sum + (product.currentStock * product.price), 
+    (sum, product) => sum + (parseFloat(product.currentStock) * parseFloat(product.sellPrice)), 
     0
   ) || 0;
   const lowStockProducts = filteredProducts?.filter(
-    product => product.currentStock <= product.minStock
+    product => parseFloat(product.currentStock) <= (product.minStock || 0)
   ).length || 0;
   const outOfStockProducts = filteredProducts?.filter(
-    product => product.currentStock === 0
+    product => parseFloat(product.currentStock) === 0
   ).length || 0;
 
   // Generate warehouse distribution data for pie chart
@@ -112,7 +112,7 @@ export default function InventoryReportPage() {
     ) || [];
     
     const stockValue = productsInWarehouse.reduce(
-      (sum, product) => sum + (product.currentStock * product.price),
+      (sum, product) => sum + (parseFloat(product.currentStock) * parseFloat(product.sellPrice)),
       0
     );
     
@@ -129,7 +129,7 @@ export default function InventoryReportPage() {
     ) || [];
     
     const stockValue = productsInCategory.reduce(
-      (sum, product) => sum + (product.currentStock * product.price),
+      (sum, product) => sum + (parseFloat(product.currentStock) * parseFloat(product.sellPrice)),
       0
     );
     
@@ -391,9 +391,9 @@ export default function InventoryReportPage() {
               {filteredProducts && filteredProducts.length > 0 ? (
                 filteredProducts.map((product) => {
                   const warehouse = warehouses?.find(w => w.id === product.warehouseId);
-                  const stockStatus = product.currentStock === 0 
+                  const stockStatus = parseFloat(product.currentStock) === 0 
                     ? "out" 
-                    : product.currentStock <= product.minStock 
+                    : parseFloat(product.currentStock) <= (product.minStock || 0) && parseFloat(product.currentStock) > 0
                       ? "low" 
                       : "normal";
                   
@@ -405,8 +405,8 @@ export default function InventoryReportPage() {
                       <TableCell>{warehouse?.name || "—"}</TableCell>
                       <TableCell>{product.currentStock} {product.unit}</TableCell>
                       <TableCell>{product.minStock} {product.unit}</TableCell>
-                      <TableCell>{product.price.toLocaleString()} جم</TableCell>
-                      <TableCell>{(product.currentStock * product.price).toLocaleString()} جم</TableCell>
+                      <TableCell>{parseFloat(product.sellPrice).toLocaleString()} جم</TableCell>
+                      <TableCell>{(parseFloat(product.currentStock) * parseFloat(product.sellPrice)).toLocaleString()} جم</TableCell>
                       <TableCell>
                         {stockStatus === "out" ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">

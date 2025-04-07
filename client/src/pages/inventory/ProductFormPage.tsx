@@ -42,6 +42,10 @@ const formSchema = insertProductSchema.extend({
   code: z.string().optional(),
   category: z.string().optional(),
   description: z.string().optional(),
+  buyPrice: z.string().min(1, "سعر الشراء مطلوب"),
+  sellPrice: z.string().min(1, "سعر البيع مطلوب"),
+  minStock: z.number().min(0, "الحد الأدنى للمخزون يجب أن يكون 0 أو أكثر"),
+  currentStock: z.string().min(1, "المخزون الحالي مطلوب"),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -76,11 +80,11 @@ export default function ProductFormPage() {
       code: "",
       category: "",
       description: "",
-      price: 0,
+      buyPrice: "0",
+      sellPrice: "0",
       unit: "قطعة",
       minStock: 1,
-      currentStock: 0,
-      warehouseId: 0,
+      currentStock: "0",
       isActive: true,
     },
   });
@@ -93,11 +97,11 @@ export default function ProductFormPage() {
         code: product.code || "",
         category: product.category || "",
         description: product.description || "",
-        price: product.price,
+        buyPrice: product.buyPrice,
+        sellPrice: product.sellPrice,
         unit: product.unit,
-        minStock: product.minStock,
+        minStock: product.minStock || 1,
         currentStock: product.currentStock,
-        warehouseId: product.warehouseId,
         isActive: product.isActive,
       });
     }
@@ -219,18 +223,18 @@ export default function ProductFormPage() {
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
-                  name="price"
+                  name="buyPrice"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>السعر *</FormLabel>
+                      <FormLabel>سعر الشراء *</FormLabel>
                       <FormControl>
                         <Input 
                           type="number"
                           step="0.01"
                           min="0" 
-                          placeholder="أدخل سعر المنتج" 
+                          placeholder="أدخل سعر الشراء" 
                           {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          onChange={(e) => field.onChange(e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -240,34 +244,55 @@ export default function ProductFormPage() {
 
                 <FormField
                   control={form.control}
-                  name="unit"
+                  name="sellPrice"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>وحدة القياس *</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        defaultValue={field.value}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="اختر وحدة القياس" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="قطعة">قطعة</SelectItem>
-                          <SelectItem value="كيلو">كيلو</SelectItem>
-                          <SelectItem value="متر">متر</SelectItem>
-                          <SelectItem value="لتر">لتر</SelectItem>
-                          <SelectItem value="علبة">علبة</SelectItem>
-                          <SelectItem value="كرتون">كرتون</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormLabel>سعر البيع *</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.01"
+                          min="0" 
+                          placeholder="أدخل سعر البيع" 
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value)}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="unit"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>وحدة القياس *</FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      defaultValue={field.value}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="اختر وحدة القياس" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="قطعة">قطعة</SelectItem>
+                        <SelectItem value="كيلو">كيلو</SelectItem>
+                        <SelectItem value="متر">متر</SelectItem>
+                        <SelectItem value="لتر">لتر</SelectItem>
+                        <SelectItem value="علبة">علبة</SelectItem>
+                        <SelectItem value="كرتون">كرتون</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField
@@ -313,37 +338,7 @@ export default function ProductFormPage() {
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name="warehouseId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>المخزن *</FormLabel>
-                    <Select 
-                      onValueChange={(value) => field.onChange(parseInt(value))}
-                      defaultValue={field.value?.toString()}
-                      value={field.value?.toString()}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="اختر المخزن" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {warehouses?.map(warehouse => (
-                          <SelectItem key={warehouse.id} value={warehouse.id.toString()}>
-                            {warehouse.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      المخزن الذي سيتم تخزين المنتج فيه
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+
 
               <FormField
                 control={form.control}

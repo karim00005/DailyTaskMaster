@@ -108,9 +108,9 @@ export default function ProductsPage() {
                     <TableCell className="font-mono">{product.code || "—"}</TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.category || "—"}</TableCell>
-                    <TableCell>{product.price?.toLocaleString()} جم</TableCell>
+                    <TableCell>{product.sellPrice} جم</TableCell>
                     <TableCell>
-                      {product.currentStock < product.minStock ? (
+                      {parseInt(product.currentStock) < (product.minStock || 0) ? (
                         <span className="text-red-500 font-bold">{product.currentStock}</span>
                       ) : (
                         product.currentStock
