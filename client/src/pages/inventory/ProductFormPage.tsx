@@ -281,6 +281,7 @@ export default function ProductFormPage() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        <SelectItem value="طن">طن</SelectItem>
                         <SelectItem value="قطعة">قطعة</SelectItem>
                         <SelectItem value="كيلو">كيلو</SelectItem>
                         <SelectItem value="متر">متر</SelectItem>

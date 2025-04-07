@@ -25,6 +25,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Loader2, ArrowRight, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -65,6 +72,8 @@ export default function ClientFormPage() {
       email: "",
       address: "",
       isActive: true,
+      clientType: "عميل",
+      taxId: "",
     },
   });
 
@@ -77,6 +86,8 @@ export default function ClientFormPage() {
         email: client.email || "",
         address: client.address || "",
         isActive: client.isActive,
+        clientType: client.clientType || "عميل",
+        taxId: client.taxId || "",
       });
     }
   }, [client, form]);
@@ -163,6 +174,47 @@ export default function ClientFormPage() {
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="clientType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>نوع الحساب</FormLabel>
+                      <Select
+                        defaultValue={field.value}
+                        onValueChange={field.onChange}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر نوع الحساب" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="عميل">عميل</SelectItem>
+                          <SelectItem value="مورد">مورد</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="taxId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>الرقم الضريبي</FormLabel>
+                      <FormControl>
+                        <Input placeholder="أدخل الرقم الضريبي" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

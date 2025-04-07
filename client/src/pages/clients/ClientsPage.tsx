@@ -24,6 +24,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   Loader2, 
   Plus, 
@@ -38,17 +45,28 @@ import { Client } from "@shared/schema";
 
 export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [clientTypeFilter, setClientTypeFilter] = useState<string>("all"); // "all", "عميل", "مورد"
   
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
   });
 
-  // Filter clients based on search query
-  const filteredClients = clients?.filter(client => 
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter clients based on search query and client type
+  const filteredClients = clients?.filter(client => {
+    // Apply search filter
+    const matchesSearch = 
+      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Apply client type filter
+    const matchesType = 
+      clientTypeFilter === "all" || 
+      client.clientType === clientTypeFilter || 
+      (!client.clientType && clientTypeFilter === "عميل"); // Default to client if not specified
+    
+    return matchesSearch && matchesType;
+  });
 
   if (isLoading) {
     return (
@@ -72,11 +90,11 @@ export default function ClientsPage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>قائمة العملاء</CardTitle>
+          <CardTitle>قائمة العملاء والموردين</CardTitle>
           <CardDescription>
-            إدارة قائمة العملاء وتعديل معلوماتهم
+            إدارة قائمة العملاء والموردين وتعديل معلوماتهم
           </CardDescription>
-          <div className="flex items-center pt-4">
+          <div className="flex items-center gap-4 pt-4">
             <div className="relative flex-1">
               <Search className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
@@ -86,6 +104,21 @@ export default function ClientsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <div className="w-48">
+              <Select
+                value={clientTypeFilter}
+                onValueChange={setClientTypeFilter}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="نوع الحساب" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="عميل">عملاء فقط</SelectItem>
+                  <SelectItem value="مورد">موردين فقط</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -93,6 +126,7 @@ export default function ClientsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>الاسم</TableHead>
+                <TableHead>نوع الحساب</TableHead>
                 <TableHead>رقم الهاتف</TableHead>
                 <TableHead>البريد الإلكتروني</TableHead>
                 <TableHead>العنوان</TableHead>
@@ -105,6 +139,13 @@ export default function ClientsPage() {
                 filteredClients.map((client) => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell>
+                      <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        client.clientType === "مورد" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                      }`}>
+                        {client.clientType || "عميل"}
+                      </div>
+                    </TableCell>
                     <TableCell>{client.phone || "—"}</TableCell>
                     <TableCell>{client.email || "—"}</TableCell>
                     <TableCell>{client.address || "—"}</TableCell>
@@ -146,8 +187,12 @@ export default function ClientsPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center h-32 text-muted-foreground">
-                    {searchQuery ? "لا توجد نتائج تطابق البحث" : "لا يوجد عملاء بعد"}
+                  <TableCell colSpan={7} className="text-center h-32 text-muted-foreground">
+                    {clientTypeFilter !== "all" 
+                      ? `لا يوجد ${clientTypeFilter === "عميل" ? "عملاء" : "موردين"} مطابقين للبحث` 
+                      : searchQuery 
+                        ? "لا توجد نتائج تطابق البحث" 
+                        : "لا يوجد عملاء أو موردين بعد"}
                   </TableCell>
                 </TableRow>
               )}

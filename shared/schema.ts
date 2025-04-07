@@ -51,7 +51,7 @@ export const products = pgTable("products", {
   barcode: text("barcode"),
   category: text("category"),
   description: text("description"),
-  unit: text("unit").notNull().default("قطعة"),
+  unit: text("unit").notNull().default("طن"),
   buyPrice: numeric("buy_price").notNull().default("0"),
   sellPrice: numeric("sell_price").notNull().default("0"),
   minStock: integer("min_stock").default(0),

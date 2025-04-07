@@ -141,9 +141,10 @@ export default function SalesInvoiceFormPage() {
     enabled: isEditMode,
   });
 
-  // Fetch clients for dropdown
+  // Fetch clients for dropdown (only clients, not suppliers)
   const { data: clients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
+    select: (data) => data.filter(client => client.clientType === "عميل" || !client.clientType),
   });
 
   // Fetch products for dropdown
