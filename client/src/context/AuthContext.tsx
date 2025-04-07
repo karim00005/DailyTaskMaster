@@ -39,10 +39,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error,
     isLoading,
   } = useQuery<User | null, Error>({
-    queryKey: ["/api/me"],
+    queryKey: ["/api/user"],
     queryFn: async () => {
       try {
-        const res = await apiRequest("GET", "/api/me");
+        const res = await apiRequest("GET", "/api/user");
         return await res.json();
       } catch (err) {
         // Return null for 401 errors, otherwise throw
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: User) => {
-      queryClient.setQueryData(["/api/me"], user);
+      queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "تم تسجيل الدخول بنجاح",
         description: `مرحباً، ${user.fullName}`,
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return await res.json();
     },
     onSuccess: (user: User) => {
-      queryClient.setQueryData(["/api/me"], user);
+      queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "تم تسجيل الحساب بنجاح",
         description: `مرحباً، ${user.fullName}`,
@@ -101,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/me"], null);
+      queryClient.setQueryData(["/api/user"], null);
       toast({
         title: "تم تسجيل الخروج بنجاح",
       });
