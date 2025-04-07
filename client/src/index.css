@@ -54,25 +54,12 @@
     @apply border-border;
   }
 
-  /* RTL support */
-  html[dir="rtl"] * {
-    text-align: right;
+  html.rtl {
+    direction: rtl;
   }
 
-  html[dir="rtl"] .rtl-flip {
-    transform: scaleX(-1);
-  }
-  
-  html[dir="ltr"] * {
-    text-align: left;
-  }
-  
-  [dir="rtl"] .ltr-only {
-    display: none !important;
-  }
-  
-  [dir="ltr"] .rtl-only {
-    display: none !important;
+  html {
+    direction: ltr;
   }
 
   body {

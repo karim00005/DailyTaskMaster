@@ -25,7 +25,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     isLoading,
   } = useQuery<Settings | undefined, Error>({
     queryKey: ["/api/settings"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: getQueryFn({}),
   });
 
   const updateSettingsMutation = useMutation({
@@ -70,34 +70,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (currentSettings.rtlMode) {
       document.documentElement.dir = "rtl";
       document.body.classList.add("rtl");
-      
-      // Add CSS variable for RTL
-      document.documentElement.style.setProperty('--app-direction', 'rtl');
-      
-      // Force all elements to use RTL text alignment
-      const styleElement = document.getElementById('rtl-style') || document.createElement('style');
-      styleElement.id = 'rtl-style';
-      styleElement.textContent = `
-        body * {
-          text-align: right !important;
-        }
-        .flex {
-          flex-direction: row-reverse !important;
-        }
-      `;
-      if (!document.getElementById('rtl-style')) {
-        document.head.appendChild(styleElement);
-      }
     } else {
       document.documentElement.dir = "ltr";
       document.body.classList.remove("rtl");
-      document.documentElement.style.setProperty('--app-direction', 'ltr');
-      
-      // Remove RTL style if it exists
-      const styleElement = document.getElementById('rtl-style');
-      if (styleElement) {
-        styleElement.remove();
-      }
     }
     
     // Apply language

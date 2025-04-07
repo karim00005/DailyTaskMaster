@@ -29,15 +29,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { 
   Loader2, 
   Save, 
@@ -46,225 +37,11 @@ import {
   Info, 
   Users, 
   Settings, 
-  Database,
-  User
+  Database
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Settings as SettingsType, Client, Product, Invoice, InvoiceItem, Transaction, User as UserType } from "@shared/schema";
-import * as ExcelHelper from "@/lib/excel-helper";
-import { useAuth } from "@/context/AuthContext";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-
-// نموذج تحديث الاسم الكامل
-function UserProfileNameForm() {
-  const { user, isLoading } = useAuth();
-  const { toast } = useToast();
-
-  const formSchema = z.object({
-    fullName: z.string().min(3, {
-      message: "يجب أن يكون الاسم الكامل على الأقل 3 أحرف",
-    }),
-  });
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      fullName: user?.fullName || "",
-    },
-  });
-
-  const updateUserMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof formSchema>) => {
-      if (!user) throw new Error("لم يتم تسجيل الدخول");
-      const res = await apiRequest("PATCH", `/api/users/${user.id}`, values);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
-      toast({
-        title: "تم تحديث الاسم بنجاح",
-        variant: "default",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "خطأ في تحديث الاسم",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    updateUserMutation.mutate(values);
-  }
-
-  if (isLoading) {
-    return <div className="flex items-center space-x-4"><Loader2 className="h-4 w-4 animate-spin" /> جاري التحميل...</div>;
-  }
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="fullName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>الاسم الكامل</FormLabel>
-              <FormControl>
-                <Input placeholder="أدخل الاسم الكامل" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button 
-          type="submit" 
-          disabled={updateUserMutation.isPending}
-        >
-          {updateUserMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-              جاري الحفظ...
-            </>
-          ) : (
-            <>
-              <User className="h-4 w-4 ml-2" />
-              تحديث الاسم
-            </>
-          )}
-        </Button>
-      </form>
-    </Form>
-  );
-}
-
-// نموذج تغيير كلمة المرور
-function UserPasswordChangeForm() {
-  const { user, isLoading } = useAuth();
-  const { toast } = useToast();
-
-  const formSchema = z.object({
-    currentPassword: z.string().min(6, {
-      message: "يجب أن تكون كلمة المرور الحالية على الأقل 6 أحرف",
-    }),
-    newPassword: z.string().min(6, {
-      message: "يجب أن تكون كلمة المرور الجديدة على الأقل 6 أحرف",
-    }),
-    confirmPassword: z.string(),
-  }).refine((data) => data.newPassword === data.confirmPassword, {
-    message: "كلمتا المرور غير متطابقتين",
-    path: ["confirmPassword"],
-  });
-
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    },
-  });
-
-  const updatePasswordMutation = useMutation({
-    mutationFn: async (values: z.infer<typeof formSchema>) => {
-      if (!user) throw new Error("لم يتم تسجيل الدخول");
-      const res = await apiRequest("PATCH", `/api/users/${user.id}`, {
-        currentPassword: values.currentPassword,
-        password: values.newPassword,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "تم تغيير كلمة المرور بنجاح",
-        variant: "default",
-      });
-      form.reset();
-    },
-    onError: (error) => {
-      toast({
-        title: "خطأ في تغيير كلمة المرور",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    updatePasswordMutation.mutate(values);
-  }
-
-  if (isLoading) {
-    return <div className="flex items-center space-x-4"><Loader2 className="h-4 w-4 animate-spin" /> جاري التحميل...</div>;
-  }
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="currentPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>كلمة المرور الحالية</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="أدخل كلمة المرور الحالية" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="newPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>كلمة المرور الجديدة</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="أدخل كلمة المرور الجديدة" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>تأكيد كلمة المرور</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="أدخل كلمة المرور الجديدة مرة أخرى" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <Button 
-          type="submit" 
-          disabled={updatePasswordMutation.isPending}
-        >
-          {updatePasswordMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-              جاري التحديث...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 ml-2" />
-              تغيير كلمة المرور
-            </>
-          )}
-        </Button>
-      </form>
-    </Form>
-  );
-}
+import { Settings as SettingsType } from "@shared/schema";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
@@ -557,25 +334,12 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
-                <h3 className="text-xl font-semibold">تحديث بيانات المستخدم الحالي</h3>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">تغيير الاسم</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <UserProfileNameForm />
-                  </CardContent>
-                </Card>
-                
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">تغيير كلمة المرور</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <UserPasswordChangeForm />
-                  </CardContent>
-                </Card>
+              <div className="flex flex-col items-center justify-center p-12 text-center space-y-4">
+                <Users className="h-16 w-16 text-muted-foreground" />
+                <h3 className="text-xl font-semibold">ميزة في التطوير</h3>
+                <p className="text-muted-foreground">
+                  سيتم إضافة ميزة إدارة المستخدمين قريباً
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -591,201 +355,7 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-6">
-                {/* قوالب Excel */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">قوالب اكسل</CardTitle>
-                    <CardDescription>
-                      تنزيل قوالب فارغة لاستيراد البيانات
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => ExcelHelper.downloadClientTemplate()}
-                      >
-                        <Download className="h-4 w-4 ml-2" />
-                        قالب العملاء
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => ExcelHelper.downloadProductTemplate()}
-                      >
-                        <Download className="h-4 w-4 ml-2" />
-                        قالب المنتجات
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* تصدير البيانات */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">تصدير البيانات إلى ملفات إكسل</CardTitle>
-                    <CardDescription>
-                      تصدير البيانات إلى ملفات إكسل للمراجعة أو النسخ الاحتياطي
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => {
-                          apiRequest("GET", "/api/clients")
-                            .then(res => res.json())
-                            .then(clients => {
-                              ExcelHelper.exportClientsToExcel(clients);
-                              toast({
-                                title: "تم التصدير بنجاح",
-                                description: "تم تصدير بيانات العملاء إلى ملف اكسل",
-                                variant: "default",
-                              });
-                            })
-                            .catch(error => {
-                              toast({
-                                title: "خطأ في التصدير",
-                                description: error.message,
-                                variant: "destructive",
-                              });
-                            });
-                        }}
-                      >
-                        <Download className="h-4 w-4 ml-2" />
-                        تصدير العملاء
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => {
-                          apiRequest("GET", "/api/products")
-                            .then(res => res.json())
-                            .then(products => {
-                              ExcelHelper.exportProductsToExcel(products);
-                              toast({
-                                title: "تم التصدير بنجاح",
-                                description: "تم تصدير بيانات المنتجات إلى ملف اكسل",
-                                variant: "default",
-                              });
-                            })
-                            .catch(error => {
-                              toast({
-                                title: "خطأ في التصدير",
-                                description: error.message,
-                                variant: "destructive",
-                              });
-                            });
-                        }}
-                      >
-                        <Download className="h-4 w-4 ml-2" />
-                        تصدير المنتجات
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* استيراد البيانات */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">استيراد البيانات من ملفات إكسل</CardTitle>
-                    <CardDescription>
-                      استيراد البيانات من ملفات إكسل لإضافتها إلى النظام
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="import-clients">استيراد العملاء</Label>
-                        <input
-                          id="import-clients"
-                          type="file"
-                          accept=".xlsx"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              ExcelHelper.importClientsFromExcel(file)
-                                .then(clients => {
-                                  toast({
-                                    title: "تم الاستيراد بنجاح",
-                                    description: `تم استيراد ${clients.length} عميل بنجاح`,
-                                    variant: "default",
-                                  });
-                                  // إعادة تعيين حقل الإدخال
-                                  e.target.value = '';
-                                })
-                                .catch(error => {
-                                  toast({
-                                    title: "خطأ في الاستيراد",
-                                    description: error.message,
-                                    variant: "destructive",
-                                  });
-                                  // إعادة تعيين حقل الإدخال
-                                  e.target.value = '';
-                                });
-                            }
-                          }}
-                        />
-                        <Button 
-                          variant="outline" 
-                          className="w-full"
-                          onClick={() => document.getElementById('import-clients')?.click()}
-                        >
-                          <Upload className="h-4 w-4 ml-2" />
-                          استيراد العملاء
-                        </Button>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <Label htmlFor="import-products">استيراد المنتجات</Label>
-                        <input
-                          id="import-products"
-                          type="file"
-                          accept=".xlsx"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              ExcelHelper.importProductsFromExcel(file)
-                                .then(products => {
-                                  toast({
-                                    title: "تم الاستيراد بنجاح",
-                                    description: `تم استيراد ${products.length} منتج بنجاح`,
-                                    variant: "default",
-                                  });
-                                  // إعادة تعيين حقل الإدخال
-                                  e.target.value = '';
-                                })
-                                .catch(error => {
-                                  toast({
-                                    title: "خطأ في الاستيراد",
-                                    description: error.message,
-                                    variant: "destructive",
-                                  });
-                                  // إعادة تعيين حقل الإدخال
-                                  e.target.value = '';
-                                });
-                            }
-                          }}
-                        />
-                        <Button 
-                          variant="outline" 
-                          className="w-full"
-                          onClick={() => document.getElementById('import-products')?.click()}
-                        >
-                          <Upload className="h-4 w-4 ml-2" />
-                          استيراد المنتجات
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* نسخة احتياطية كاملة */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">نسخة احتياطية</CardTitle>
@@ -797,51 +367,17 @@ export default function SettingsPage() {
                     <p className="text-sm text-muted-foreground mb-4">
                       قم بإنشاء نسخة احتياطية كاملة من قاعدة البيانات، بما في ذلك المنتجات والعملاء والفواتير والإعدادات.
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => {
-                          Promise.all([
-                            apiRequest("GET", "/api/clients").then(res => res.json()),
-                            apiRequest("GET", "/api/products").then(res => res.json()),
-                            apiRequest("GET", "/api/invoices").then(res => res.json()),
-                            apiRequest("GET", "/api/invoices/1/items").then(res => res.json()), // يجب تعديل هذا للحصول على جميع عناصر الفواتير
-                            apiRequest("GET", "/api/transactions").then(res => res.json())
-                          ])
-                          .then(([clients, products, invoices, invoiceItems, transactions]) => {
-                            ExcelHelper.exportFullBackup(clients, products, invoices, invoiceItems, transactions);
-                            toast({
-                              title: "تم التصدير بنجاح",
-                              description: "تم إنشاء نسخة احتياطية كاملة بتنسيق Excel",
-                              variant: "default",
-                            });
-                          })
-                          .catch(error => {
-                            toast({
-                              title: "خطأ في إنشاء النسخة الاحتياطية",
-                              description: error.message,
-                              variant: "destructive",
-                            });
-                          });
-                        }}
-                      >
-                        <Download className="h-4 w-4 ml-2" />
-                        نسخة Excel
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => setIsBackupDialogOpen(true)}
-                      >
-                        <Download className="h-4 w-4 ml-2" />
-                        نسخة JSON
-                      </Button>
-                    </div>
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => setIsBackupDialogOpen(true)}
+                    >
+                      <Download className="h-4 w-4 ml-2" />
+                      إنشاء نسخة احتياطية
+                    </Button>
                   </CardContent>
                 </Card>
 
-                {/* استعادة النسخة الاحتياطية */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base">استعادة البيانات</CardTitle>
@@ -853,57 +389,14 @@ export default function SettingsPage() {
                     <p className="text-sm text-muted-foreground mb-4">
                       قم باستعادة بيانات النظام من نسخة احتياطية سابقة. سيتم استبدال جميع البيانات الحالية.
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="import-backup">استعادة من Excel</Label>
-                        <input
-                          id="import-backup"
-                          type="file"
-                          accept=".xlsx"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              ExcelHelper.importFullBackup(file)
-                                .then(result => {
-                                  toast({
-                                    title: "تم الاستيراد بنجاح",
-                                    description: "تم استعادة البيانات بنجاح",
-                                    variant: "default",
-                                  });
-                                  // إعادة تعيين حقل الإدخال
-                                  e.target.value = '';
-                                })
-                                .catch(error => {
-                                  toast({
-                                    title: "خطأ في الاستيراد",
-                                    description: error.message,
-                                    variant: "destructive",
-                                  });
-                                  // إعادة تعيين حقل الإدخال
-                                  e.target.value = '';
-                                });
-                            }
-                          }}
-                        />
-                        <Button 
-                          variant="outline" 
-                          className="w-full"
-                          onClick={() => document.getElementById('import-backup')?.click()}
-                        >
-                          <Upload className="h-4 w-4 ml-2" />
-                          استعادة من Excel
-                        </Button>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => setIsRestoreDialogOpen(true)}
-                      >
-                        <Upload className="h-4 w-4 ml-2" />
-                        استعادة من JSON
-                      </Button>
-                    </div>
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={() => setIsRestoreDialogOpen(true)}
+                    >
+                      <Upload className="h-4 w-4 ml-2" />
+                      استعادة البيانات
+                    </Button>
                   </CardContent>
                 </Card>
               </div>
