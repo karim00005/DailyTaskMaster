@@ -13,6 +13,7 @@ import {
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { setupAuth } from "./auth";
+import { setupImportExportRoutes } from "./import-export-routes";
 import Stripe from "stripe";
 
 // Initialize Stripe if the API key is available
@@ -26,6 +27,9 @@ if (process.env.STRIPE_SECRET_KEY) {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Set up authentication routes
   setupAuth(app);
+  
+  // Set up import/export routes
+  setupImportExportRoutes(app);
 
   // User routes
   app.get("/api/users", async (req: Request, res: Response) => {
