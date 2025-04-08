@@ -504,8 +504,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invoices", async (req: Request, res: Response) => {
     try {
-      console.log("Received invoice data:", req.body);
+      console.log("Received invoice data:", JSON.stringify(req.body, null, 2));
+      console.log("Request headers:", req.headers);
+      console.log("Request is authenticated:", req.isAuthenticated());
+      
+      // Check if the request body has the expected structure
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ message: "Invalid request body format" });
+      }
+      
       const { invoice, items } = req.body;
+      
+      // Validate invoice and items existence
+      if (!invoice) {
+        return res.status(400).json({ message: "Missing invoice data in request body" });
+      }
+      
+      if (!items || !Array.isArray(items)) {
+        return res.status(400).json({ message: "Missing or invalid items array in request body" });
+      }
+      
+      console.log("Invoice data extracted:", JSON.stringify(invoice, null, 2));
+      console.log("Items data extracted:", JSON.stringify(items, null, 2));
       
       // Transform invoice data if needed
       const transformedInvoice = {

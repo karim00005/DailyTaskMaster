@@ -358,6 +358,13 @@ export default function SalesInvoiceFormPage() {
 
   // Form submission handler
   const onSubmit = (values: FormValues) => {
+    console.log("Form submit triggered with values:", values);
+    
+    // Log form validity
+    console.log("Form is valid:", form.formState.isValid);
+    console.log("Form errors:", form.formState.errors);
+    
+    // Proceed with submission
     mutation.mutate(values);
   };
 
@@ -466,7 +473,7 @@ export default function SalesInvoiceFormPage() {
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0">
                             <Calendar
-                              selected={field.value}
+                              date={field.value}
                               onSelect={field.onChange}
                               initialFocus
                             />
@@ -582,6 +589,7 @@ export default function SalesInvoiceFormPage() {
                       />
                     </div>
                     <Button 
+                      type="button"
                       onClick={addProduct} 
                       disabled={!selectedProduct}
                     >
@@ -664,6 +672,7 @@ export default function SalesInvoiceFormPage() {
                         </TableCell>
                         <TableCell>
                           <Button 
+                            type="button"
                             variant="ghost" 
                             size="icon" 
                             onClick={() => {
