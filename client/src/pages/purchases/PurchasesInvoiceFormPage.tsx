@@ -277,7 +277,7 @@ export default function PurchasesInvoiceFormPage() {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
           date: format(data.date, "yyyy-MM-dd"),
-          invoiceType: "purchases", // نوع الفاتورة مشتريات
+          invoiceType: "فاتورة شراء", // نوع الفاتورة مشتريات
           status: "pending",
           paymentMethod: "cash",
           subTotal: data.subtotal.toString(),

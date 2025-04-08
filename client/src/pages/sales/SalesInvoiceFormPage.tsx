@@ -277,7 +277,7 @@ export default function SalesInvoiceFormPage() {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
           date: format(data.date, "yyyy-MM-dd"),
-          invoiceType: "sales", // نوع الفاتورة مبيعات
+          invoiceType: "فاتورة بيع", // نوع الفاتورة مبيعات
           status: "pending",
           paymentMethod: "cash",
           subTotal: data.subtotal.toString(),
