@@ -163,7 +163,7 @@ export function setupAuth(app: Express) {
     "/api/settings",
     "/api/dashboard"
   ], (req, res, next) => {
-    // Skip auth check for GET on public resources
+    // Skip auth check for GET requests only
     if (req.method === "GET") {
       return next();
     }
