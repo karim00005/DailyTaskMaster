@@ -66,6 +66,7 @@ import {
 } from "@shared/schema";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { getStoredUser } from "@/lib/auth";
 
 // Helper to generate a new invoice number
 function generateInvoiceNumber() {
@@ -73,8 +74,8 @@ function generateInvoiceNumber() {
   const year = date.getFullYear().toString().substring(2);
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
   const day = date.getDate().toString().padStart(2, "0");
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-  return `PUR-${year}${month}${day}-${random}`;
+  const timestamp = Date.now().toString().slice(-4); // Use timestamp instead of random 
+  return `PUR-${year}${month}${day}-${timestamp}`;
 }
 
 // Item schema for the form
@@ -92,6 +93,7 @@ const formSchema = insertInvoiceSchema.extend({
   clientId: z.number({
     required_error: "يجب اختيار المورد",
   }),
+  userId: z.number(),  // Add this line
   clientName: z.string(),
   date: z.date(),
   dueDate: z.date().optional(),
@@ -108,6 +110,7 @@ type FormValues = z.infer<typeof formSchema>;
 type InvoiceItemFormValues = z.infer<typeof invoiceItemSchema>;
 
 export default function PurchasesInvoiceFormPage() {
+  // Removed duplicate declaration of user
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -116,6 +119,17 @@ export default function PurchasesInvoiceFormPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productQuantity, setProductQuantity] = useState(1);
   const [productPrice, setProductPrice] = useState(0);
+
+  // Add this near the top of the component
+  const user = getStoredUser();
+  
+  // If no user is found, redirect to login
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+  }, [user, navigate]);
 
   // Fetch invoice data if in edit mode
   const { data: invoice, isLoading: isLoadingInvoice } = useQuery<Invoice & { items: InvoiceItem[] }>({
@@ -145,6 +159,7 @@ export default function PurchasesInvoiceFormPage() {
     defaultValues: {
       invoiceNumber: generateInvoiceNumber(),
       clientId: 0,
+      userId: user?.id || 0, // Use actual user ID from stored user
       clientName: "",
       date: new Date(),
       items: [],
@@ -223,11 +238,13 @@ export default function PurchasesInvoiceFormPage() {
 
   // Update form with invoice data when it's loaded
   useEffect(() => {
-    if (invoice && invoice.items) {
+    if (invoice && invoice.items && clients) {
+      const client = clients.find(c => c.id === invoice.clientId);
       form.reset({
         invoiceNumber: invoice.invoiceNumber,
         clientId: invoice.clientId || 0,
-        clientName: "",
+        userId: user?.id || 0,
+        clientName: client?.name || invoice.clientName || "",
         date: new Date(invoice.date),
         subtotal: parseFloat(invoice.subTotal) || 0,
         discount: parseFloat(invoice.discount || "0") || 0,
@@ -238,14 +255,24 @@ export default function PurchasesInvoiceFormPage() {
         items: invoice.items.map(item => ({
           invoiceId: item.invoiceId || 0,
           productId: item.productId || 0,
-          productName: "",
+          productName: item.productName || "", // Ensure productName is set
           quantity: parseFloat(item.quantity) || 0,
           price: parseFloat(item.price) || 0,
           total: parseFloat(item.total) || 0,
         })),
       });
     }
-  }, [invoice, form]);
+  }, [invoice, clients, form, user]);
+
+  // New effect to update clientName from loaded clients if empty
+  useEffect(() => {
+    if (invoice && clients) {
+      const client = clients.find(c => c.id === invoice.clientId);
+      if (client && !form.getValues("clientName")) {
+        form.setValue("clientName", client.name);
+      }
+    }
+  }, [invoice, clients, form]);
 
   // Update client name when client is selected
   useEffect(() => {
@@ -276,6 +303,8 @@ export default function PurchasesInvoiceFormPage() {
         invoice: {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
+          userId: user?.id || 0, // Use actual user ID
+          clientName: data.clientName, // Ensure clientName is included
           date: format(data.date, "yyyy-MM-dd"),
           invoiceType: "فاتورة شراء", // نوع الفاتورة مشتريات
           status: "pending",
@@ -301,8 +330,8 @@ export default function PurchasesInvoiceFormPage() {
       console.log("Submitting invoice data:", formattedData);
 
       if (isEditMode) {
-        // Update existing invoice
-        return apiRequest("PATCH", `/api/invoices/${id}`, formattedData.invoice).then(res => res.json());
+        // Send both invoice and items data when updating
+        return apiRequest("PATCH", `/api/invoices/${id}`, formattedData).then(res => res.json());
       } else {
         // Create new invoice
         return apiRequest("POST", "/api/invoices", formattedData).then(res => res.json());

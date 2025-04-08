@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, queryClient } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { 
   Table, 
@@ -36,7 +36,7 @@ import {
   FileDown,
 } from "lucide-react";
 import { Invoice, Client } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { 
   AlertDialog,
@@ -71,17 +71,13 @@ export default function SalesInvoicesPage() {
           throw new Error(`API error: ${res.status} - ${errorText}`);
         }
         const data = await res.json();
-        console.log("Fetched invoices:", data);
         
-        // Join invoice data with client data
-        const invoicesWithClientData = data.map((invoice: Invoice) => {
-          const client = clients?.find(c => c.id === invoice.clientId);
-          return {
-            ...invoice,
-            clientName: client?.name || "عميل غير معروف"
-          };
-        });
-        
+        // Better client name handling
+        const invoicesWithClientData = data.map((invoice: Invoice) => ({
+          ...invoice,
+          clientName: invoice.clientName || "بدون اسم عميل" // Use the stored clientName directly
+        }));
+
         return invoicesWithClientData;
       } catch (error: any) {
         console.error("Error fetching invoices:", error);
@@ -98,42 +94,30 @@ export default function SalesInvoicesPage() {
     staleTime: 0
   });
 
-  // Filter invoices based on search query
-  const filteredInvoices = invoices?.filter(invoice => 
-    invoice.invoiceNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    invoice.clientName?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("ar-EG", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-  };
-
-  // Delete mutation
+  // Move deletion mutation here, before any conditional returns
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       try {
+        // First get the invoice details to calculate balance update
+        const invoice = await apiRequest("GET", `/api/invoices/${id}`).then(res => res.json());
+        
+        // Delete the invoice
         const res = await apiRequest("DELETE", `/api/invoices/${id}`);
         if (!res.ok) {
           const errorText = await res.text();
           console.error("API error deleting invoice:", res.status, errorText);
           throw new Error(`API error: ${res.status} - ${errorText}`);
         }
-        const data = await res.json();
-        return data;
+
+        // Update client balance
+        if (invoice.clientId) {
+          await apiRequest("POST", `/api/clients/${invoice.clientId}/updateBalance`, {
+            amount: -invoice.total, // Subtract invoice total from client balance
+            description: `إلغاء فاتورة رقم ${invoice.invoiceNumber}`
+          });
+        }
+
+        return await res.json();
       } catch (error: any) {
         console.error("Delete error:", error);
         toast({
@@ -164,6 +148,30 @@ export default function SalesInvoicesPage() {
       });
     }
   });
+
+  // Filter invoices based on search query
+  const filteredInvoices = invoices?.filter(invoice => 
+    invoice.invoiceNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    invoice.clientName?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("ar-EG", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+  };
 
   // Handle invoice actions
   const handleView = (invoice: Invoice) => {

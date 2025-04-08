@@ -42,15 +42,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/user"],
     queryFn: async () => {
       try {
-        const res = await apiRequest("GET", "/api/user");
-        return await res.json();
+        const res = await apiRequest("GET", "/api/me");
+        const userData = await res.json();
+        // Store user data in localStorage when received
+        if (userData) {
+          localStorage.setItem('user', JSON.stringify(userData));
+        }
+        return userData;
       } catch (err) {
-        // Return null for 401 errors, otherwise throw
+        // Clear localStorage on error
+        localStorage.removeItem('user');
         if (err instanceof Response && err.status === 401) {
           return null;
         }
         throw err;
       }
+    },
+    initialData: () => {
+      // Try to load initial data from localStorage
+      const saved = localStorage.getItem('user');
+      return saved ? JSON.parse(saved) : null;
     },
   });
 

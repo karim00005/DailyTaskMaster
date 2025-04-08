@@ -293,14 +293,17 @@ export class DatabaseStorage implements IStorage {
               if (invoiceData.invoiceType === 'فاتورة بيع') {
                 // Convert to numbers for calculation then back to string
                 const currentStock = parseFloat(product.currentStock);
-                const itemQuantity = parseFloat(item.quantity.toString());
+                // Ensure quantity exists and has a valid value
+                const itemQuantity = item.quantity ? parseFloat(item.quantity.toString()) : 0;
+                if (itemQuantity <= 0) continue; // Skip if no valid quantity
                 newStock = (currentStock - itemQuantity).toString();
               } 
               // For purchase invoices, increase stock
               else if (invoiceData.invoiceType === 'فاتورة شراء') {
                 // Convert to numbers for calculation then back to string
                 const currentStock = parseFloat(product.currentStock);
-                const itemQuantity = parseFloat(item.quantity.toString());
+                const itemQuantity = item.quantity ? parseFloat(item.quantity.toString()) : 0;
+                if (itemQuantity <= 0) continue; // Skip if no valid quantity
                 newStock = (currentStock + itemQuantity).toString();
               }
               // For other invoice types, don't change stock
@@ -450,6 +453,9 @@ export class DatabaseStorage implements IStorage {
         
         if (product) {
           // Get the invoice to determine if it's a sale or purchase
+          if (!originalItem.invoiceId) {
+            return updatedItem;
+          }
           const [invoice] = await tx.select()
             .from(invoices)
             .where(eq(invoices.id, originalItem.invoiceId));

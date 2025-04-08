@@ -73,8 +73,8 @@ function generateInvoiceNumber() {
   const year = date.getFullYear().toString().substring(2);
   const month = (date.getMonth() + 1).toString().padStart(2, "0");
   const day = date.getDate().toString().padStart(2, "0");
-  const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
-  return `INV-${year}${month}${day}-${random}`;
+  const timestamp = Date.now().toString().slice(-4); // Use timestamp instead of random
+  return `INV-${year}${month}${day}-${timestamp}`;
 }
 
 // Item schema for the form
@@ -226,10 +226,11 @@ export default function SalesInvoiceFormPage() {
   // Update form with invoice data when it's loaded
   useEffect(() => {
     if (invoice && invoice.items) {
+      const client = clients?.find(c => c.id === invoice.clientId);
       form.reset({
         invoiceNumber: invoice.invoiceNumber,
         clientId: invoice.clientId || 0,
-        clientName: "",
+        clientName: client?.name || "", // Set client name from found client
         date: new Date(invoice.date),
         subtotal: parseFloat(invoice.subTotal) || 0,
         discount: parseFloat(invoice.discount || "0") || 0,
@@ -237,17 +238,20 @@ export default function SalesInvoiceFormPage() {
         total: parseFloat(invoice.total) || 0,
         paid: parseFloat(invoice.paid || "0") || 0,
         notes: invoice.notes || "",
-        items: invoice.items.map(item => ({
-          invoiceId: item.invoiceId || 0,
-          productId: item.productId || 0,
-          productName: "",
-          quantity: parseFloat(item.quantity) || 0,
-          price: parseFloat(item.price) || 0,
-          total: parseFloat(item.total) || 0,
-        })),
+        items: invoice.items.map(item => {
+          const product = products?.find(p => p.id === item.productId);
+          return {
+            invoiceId: item.invoiceId || 0,
+            productId: item.productId || 0,
+            productName: product?.name || "",
+            quantity: parseFloat(item.quantity) || 0,
+            price: parseFloat(item.price) || 0,
+            total: parseFloat(item.total) || 0,
+          };
+        }),
       });
     }
-  }, [invoice, form]);
+  }, [invoice, form, clients, products]);
 
   // Update client name when client is selected
   useEffect(() => {
@@ -278,8 +282,9 @@ export default function SalesInvoiceFormPage() {
         invoice: {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
+          clientName: data.clientName, // Make sure to include clientName
           date: format(data.date, "yyyy-MM-dd"),
-          invoiceType: "فاتورة بيع", // نوع الفاتورة مبيعات
+          invoiceType: "فاتورة بيع",
           status: "pending",
           paymentMethod: "cash",
           subTotal: data.subtotal.toString(),
@@ -294,20 +299,26 @@ export default function SalesInvoiceFormPage() {
           productId: item.productId,
           quantity: item.quantity.toString(),
           price: item.price.toString(),
-          total: (item.quantity * item.price).toString(),
+          total: item.total.toString(),
           discount: "0",
           tax: "0"
         }))
       };
 
-      console.log("Submitting invoice data:", formattedData);
-
       if (isEditMode) {
-        // Update existing invoice
-        return apiRequest("PATCH", `/api/invoices/${id}`, formattedData.invoice).then(res => res.json());
+        // For updates, send just the invoice data
+        const response = await apiRequest("PATCH", `/api/invoices/${id}`, formattedData.invoice);
+        if (!response.ok) {
+          throw new Error("Failed to update invoice");
+        }
+        return response.json();
       } else {
-        // Create new invoice
-        return apiRequest("POST", "/api/invoices", formattedData).then(res => res.json());
+        // For new invoices, send both invoice and items
+        const response = await apiRequest("POST", "/api/invoices", formattedData);
+        if (!response.ok) {
+          throw new Error("Failed to create invoice");
+        }
+        return response.json();
       }
     },
     onSuccess: () => {
