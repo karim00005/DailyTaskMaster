@@ -54,16 +54,89 @@
     @apply border-border;
   }
 
-  html.rtl {
-    direction: rtl;
-  }
-
-  html {
-    direction: ltr;
-  }
-
   body {
     @apply font-sans antialiased bg-background text-foreground;
     font-family: 'Cairo', sans-serif;
   }
+}
+
+/* RTL Support */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .rtl-rotate-180 {
+  transform: rotate(180deg);
+}
+
+/* Fix for input fields in RTL mode */
+[dir="rtl"] input, 
+[dir="rtl"] textarea,
+[dir="rtl"] .rtl-input {
+  text-align: right;
+}
+
+/* Fix for buttons in RTL mode */
+[dir="rtl"] .flex {
+  flex-direction: row;
+}
+
+[dir="rtl"] .rtl-reverse {
+  flex-direction: row-reverse;
+}
+
+/* Fix for tables in RTL mode */
+[dir="rtl"] table th,
+[dir="rtl"] table td {
+  text-align: right;
+}
+
+/* Fix for dropdown menus and dialogs */
+[dir="rtl"] .rtl-dropdown {
+  left: auto;
+  right: 0;
+}
+
+/* Arabic font tweaks */
+.arabic-text {
+  font-family: 'Cairo', sans-serif;
+  letter-spacing: -0.5px;
+}
+
+/* Excel Import/Export Styles */
+.excel-import-container {
+  border: 2px dashed hsl(var(--border));
+  padding: 2rem;
+  text-align: center;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.excel-import-container:hover {
+  border-color: hsl(var(--primary));
+  background-color: hsl(var(--primary)/0.05);
+}
+
+.dark .excel-import-container:hover {
+  background-color: hsl(var(--primary)/0.1);
+}
+
+.excel-import-container.border-primary {
+  border-color: hsl(var(--primary));
+}
+
+.excel-template-link {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.excel-template-link:hover {
+  opacity: 0.8;
 }

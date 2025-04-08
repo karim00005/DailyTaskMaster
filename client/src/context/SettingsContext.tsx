@@ -25,7 +25,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     isLoading,
   } = useQuery<Settings | undefined, Error>({
     queryKey: ["/api/settings"],
-    queryFn: getQueryFn({}),
+    queryFn: getQueryFn({ on401: "returnNull" }),
   });
 
   const updateSettingsMutation = useMutation({
@@ -69,10 +69,24 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // Apply RTL mode
     if (currentSettings.rtlMode) {
       document.documentElement.dir = "rtl";
+      document.documentElement.setAttribute("dir", "rtl");
       document.body.classList.add("rtl");
+      
+      // Fix layout for RTL
+      const cssVars = document.querySelector(':root') as HTMLElement;
+      if (cssVars) {
+        cssVars.style.setProperty('--direction', 'rtl');
+      }
     } else {
       document.documentElement.dir = "ltr";
+      document.documentElement.setAttribute("dir", "ltr");
       document.body.classList.remove("rtl");
+      
+      // Reset layout for LTR
+      const cssVars = document.querySelector(':root') as HTMLElement;
+      if (cssVars) {
+        cssVars.style.setProperty('--direction', 'ltr');
+      }
     }
     
     // Apply language

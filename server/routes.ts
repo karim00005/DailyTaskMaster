@@ -170,6 +170,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Handle bulk import of clients
+  app.post("/api/clients/import", async (req: Request, res: Response) => {
+    try {
+      if (!Array.isArray(req.body)) {
+        return res.status(400).json({ message: "Request body must be an array of clients" });
+      }
+      
+      const results = {
+        success: 0,
+        errors: 0,
+        messages: [] as string[]
+      };
+      
+      for (const clientData of req.body) {
+        try {
+          const validatedData = insertClientSchema.safeParse(clientData);
+          
+          if (!validatedData.success) {
+            const errorMessage = fromZodError(validatedData.error).message;
+            results.errors++;
+            results.messages.push(`Error with client "${clientData.name || 'Unknown'}": ${errorMessage}`);
+            continue;
+          }
+          
+          // Check if name already exists
+          const existingClient = await storage.getClientByName(validatedData.data.name);
+          if (existingClient) {
+            // Update existing client instead of creating a new one
+            await storage.updateClient(existingClient.id, validatedData.data);
+            results.success++;
+            continue;
+          }
+          
+          // Create new client
+          await storage.createClient(validatedData.data);
+          results.success++;
+        } catch (error) {
+          console.error("Error processing client import:", error);
+          results.errors++;
+          results.messages.push(`Error with client "${clientData.name || 'Unknown'}": ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+      
+      res.status(200).json(results);
+    } catch (error) {
+      console.error("Error importing clients:", error);
+      res.status(500).json({ message: "Failed to import clients" });
+    }
+  });
+
   app.patch("/api/clients/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);
