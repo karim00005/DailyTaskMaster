@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, queryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { 
   Table, 
@@ -35,18 +35,67 @@ import {
   Printer,
   FileDown,
 } from "lucide-react";
-import { Invoice } from "@shared/schema";
+import { Invoice, Client } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent, 
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function SalesInvoicesPage() {
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
+  const { data: clients } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+  });
+
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/invoices"],
+    queryKey: ["/api/invoices", "sale"],
     queryFn: async () => {
-      // Filter for sales invoices only (type: "sale")
-      const res = await fetch("/api/invoices?type=sale");
-      return await res.json();
+      try {
+        console.log("Fetching sales invoices...");
+        const res = await apiRequest("GET", "/api/invoices?type=فاتورة بيع");
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("API error fetching invoices:", res.status, errorText);
+          throw new Error(`API error: ${res.status} - ${errorText}`);
+        }
+        const data = await res.json();
+        console.log("Fetched invoices:", data);
+        
+        // Join invoice data with client data
+        const invoicesWithClientData = data.map((invoice: Invoice) => {
+          const client = clients?.find(c => c.id === invoice.clientId);
+          return {
+            ...invoice,
+            clientName: client?.name || "عميل غير معروف"
+          };
+        });
+        
+        return invoicesWithClientData;
+      } catch (error: any) {
+        console.error("Error fetching invoices:", error);
+        toast({
+          title: "حدث خطأ أثناء جلب الفواتير",
+          description: error.message || "فشل جلب الفواتير",
+          variant: "destructive",
+        });
+        throw error;
+      }
     },
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
+    staleTime: 0
   });
 
   // Filter invoices based on search query
@@ -71,6 +120,67 @@ export default function SalesInvoicesPage() {
       month: "2-digit",
       day: "2-digit",
     });
+  };
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      try {
+        const res = await apiRequest("DELETE", `/api/invoices/${id}`);
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("API error deleting invoice:", res.status, errorText);
+          throw new Error(`API error: ${res.status} - ${errorText}`);
+        }
+        const data = await res.json();
+        return data;
+      } catch (error: any) {
+        console.error("Delete error:", error);
+        toast({
+          title: "حدث خطأ أثناء حذف الفاتورة",
+          description: error.message || "فشل حذف الفاتورة",
+          variant: "destructive",
+        });
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      
+      toast({
+        title: "تم حذف الفاتورة بنجاح",
+        variant: "default",
+      });
+      
+      setIsDeleteDialogOpen(false);
+    },
+    onError: (error: any) => {
+      console.error("Delete mutation error:", error);
+      toast({
+        title: "حدث خطأ",
+        description: error.message || "فشل حذف الفاتورة",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Handle invoice actions
+  const handleView = (invoice: Invoice) => {
+    window.open(`/api/invoices/${invoice.id}/view`, '_blank');
+  };
+
+  const handlePrint = (invoice: Invoice) => {
+    window.open(`/api/invoices/${invoice.id}/print`, '_blank');
+  };
+
+  const handleExport = (invoice: Invoice) => {
+    window.open(`/api/invoices/${invoice.id}/export`, '_blank');
+  };
+
+  const handleDelete = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setIsDeleteDialogOpen(true);
   };
 
   return (
@@ -156,19 +266,22 @@ export default function SalesInvoicesPage() {
                               <span>تعديل</span>
                             </DropdownMenuItem>
                           </Link>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleView(invoice)}>
                             <Eye className="h-4 w-4 ml-2" />
                             <span>عرض</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handlePrint(invoice)}>
                             <Printer className="h-4 w-4 ml-2" />
                             <span>طباعة</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleExport(invoice)}>
                             <FileDown className="h-4 w-4 ml-2" />
                             <span>تصدير PDF</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem 
+                            className="text-red-600"
+                            onSelect={() => handleDelete(invoice)}
+                          >
                             <Trash className="h-4 w-4 ml-2" />
                             <span>حذف</span>
                           </DropdownMenuItem>
@@ -188,6 +301,33 @@ export default function SalesInvoicesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>هل أنت متأكد من حذف هذه الفاتورة؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              سيتم حذف الفاتورة وتحديث رصيد العميل تلقائياً. لا يمكن التراجع عن هذا الإجراء.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => selectedInvoice && deleteMutation.mutate(selectedInvoice.id)}
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                  جاري الحذف...
+                </>
+              ) : (
+                "حذف"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -9,6 +9,11 @@ export function formatDisplayDate(date: Date): string {
 }
 
 export function formatMonthYear(date: Date): string {
+  // Check if the date is a valid Date object
+  if (!(date instanceof Date) || isNaN(date.getTime())) {
+    console.warn("Invalid date provided to formatMonthYear:", date);
+    return "";
+  }
   return format(date, "MMMM yyyy");
 }
 

@@ -102,6 +102,7 @@ const formSchema = insertInvoiceSchema.extend({
   total: z.number(),
   notes: z.string().optional(),
   paid: z.number().default(0),
+  invoiceType: z.string().default("فاتورة بيع")
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -147,6 +148,7 @@ export default function SalesInvoiceFormPage() {
       clientId: 0,
       clientName: "",
       date: new Date(),
+      invoiceType: "فاتورة بيع",
       items: [],
       subtotal: 0,
       discount: 0,
@@ -309,8 +311,9 @@ export default function SalesInvoiceFormPage() {
       }
     },
     onSuccess: () => {
-      // Invalidate queries and show success message
+      // Invalidate both general and sales-specific queries
       queryClient.invalidateQueries({ queryKey: ["/api/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/invoices", "sale"] });
       
       toast({
         title: isEditMode ? "تم تحديث الفاتورة بنجاح" : "تم إنشاء الفاتورة بنجاح",
@@ -358,14 +361,34 @@ export default function SalesInvoiceFormPage() {
 
   // Form submission handler
   const onSubmit = (values: FormValues) => {
-    console.log("Form submit triggered with values:", values);
+    console.log("Submit handler called."); // New log
+    debugger; // Force debugger pause if DevTools is open
+    console.log("onSubmit called with values:", values);
     
-    // Log form validity
-    console.log("Form is valid:", form.formState.isValid);
-    console.log("Form errors:", form.formState.errors);
+    // Convert date if necessary
+    if (!(values.date instanceof Date)) {
+      console.warn("Converting date from:", values.date);
+      values.date = new Date(values.date);
+    }
+    
+    // Ensure the date field is valid
+    if (!values.date || isNaN(values.date.getTime())) {
+      console.error("Invalid date value:", values.date);
+      toast({
+        title: "خطأ في البيانات",
+        description: "يرجى اختيار تاريخ صالح.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Proceed with submission
     mutation.mutate(values);
+  };
+
+  // Add an onError handler to log validation errors.
+  const handleError = (errors: any) => {
+    console.error("Validation errors:", errors);
   };
 
   // Loading state
@@ -399,7 +422,7 @@ export default function SalesInvoiceFormPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit, handleError)} className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Invoice Details Section */}
             <Card>
@@ -416,9 +439,10 @@ export default function SalesInvoiceFormPage() {
                     name="invoiceNumber"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>رقم الفاتورة *</FormLabel>
+                        <FormLabel htmlFor="invoiceNumber">رقم الفاتورة *</FormLabel>
                         <FormControl>
-                          <Input placeholder="رقم الفاتورة" {...field} />
+                          {/* Added id and autoComplete */}
+                          <Input id="invoiceNumber" autoComplete="on" placeholder="رقم الفاتورة" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -430,9 +454,11 @@ export default function SalesInvoiceFormPage() {
                     name="clientId"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>العميل *</FormLabel>
+                        <FormLabel htmlFor="clientId">العميل *</FormLabel>
                         <FormControl>
+                          {/* Pass id here so that the underlying input has it */}
                           <Combobox
+                            id="clientId"
                             options={clients?.map(client => ({
                               value: client.id.toString(),
                               label: client.name
@@ -454,29 +480,30 @@ export default function SalesInvoiceFormPage() {
                     name="date"
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>تاريخ الفاتورة *</FormLabel>
+                        <FormLabel htmlFor="date">تاريخ الفاتورة *</FormLabel>
                         <Popover>
                           <PopoverTrigger asChild>
                             <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className="w-full pr-3 text-right font-normal"
-                              >
-                                {field.value ? (
-                                  format(field.value, "yyyy/MM/dd", { locale: ar })
-                                ) : (
-                                  <span>اختر التاريخ</span>
-                                )}
+                              {/* Added id to button for proper matching */}
+                              <Button id="date" variant={"outline"} className="w-full pr-3 text-right font-normal">
+                                {field.value ? format(field.value, "yyyy/MM/dd", { locale: ar }) : <span>اختر التاريخ</span>}
                                 <CalendarIcon className="mr-auto h-4 w-4" />
                               </Button>
                             </FormControl>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0">
                             <Calendar
-                              date={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                            />
+                                month={field.value}
+                                onMonthChange={(newMonth) => {
+                                  // Log month changes without updating the selected date
+                                  console.log("Calendar month changed:", newMonth);
+                                }}
+                                selectedDate={field.value}
+                                onDateSelect={(date) => {
+                                  console.log("Calendar date selected:", date);
+                                  field.onChange(date);
+                                }}
+                              />
                           </PopoverContent>
                         </Popover>
                         <FormMessage />
@@ -501,9 +528,11 @@ export default function SalesInvoiceFormPage() {
                   name="paid"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>المبلغ المدفوع</FormLabel>
+                      <FormLabel htmlFor="paid">المبلغ المدفوع</FormLabel>
                       <FormControl>
                         <Input 
+                          id="paid"
+                          autoComplete="on"
                           type="number"
                           min="0"
                           step="0.01"
@@ -525,9 +554,14 @@ export default function SalesInvoiceFormPage() {
                   name="notes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ملاحظات</FormLabel>
+                      <FormLabel htmlFor="notes">ملاحظات</FormLabel>
                       <FormControl>
-                        <Input placeholder="ملاحظات إضافية حول الفاتورة" {...field} />
+                        <Input 
+                          id="notes"
+                          autoComplete="on"
+                          placeholder="ملاحظات إضافية حول الفاتورة" 
+                          {...field} 
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -553,6 +587,7 @@ export default function SalesInvoiceFormPage() {
                     <div className="space-y-2">
                       <Label htmlFor="product">المنتج</Label>
                       <Combobox
+                        id="product"
                         options={products?.map(product => ({
                           value: product.id.toString(),
                           label: product.name
@@ -762,7 +797,11 @@ export default function SalesInvoiceFormPage() {
               </div>
             </CardContent>
             <CardFooter className="flex justify-end">
-              <Button type="submit" disabled={mutation.isPending} className="w-[200px]">
+              <Button 
+                type="submit" 
+                onClick={() => console.log("Submit button clicked")} 
+                disabled={mutation.isPending}
+              >
                 {mutation.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 ml-2 animate-spin" />

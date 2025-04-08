@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useLocation } from "wouter";
 import { z } from "zod";
@@ -59,10 +59,11 @@ export default function AuthPage() {
   });
   
   // Redirect if already logged in - AFTER all hooks are called
-  if (user) {
-    navigate("/");
-    return null;
-  }
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+    }
+  }, [user, navigate]);
 
   const onLoginSubmit = (values: LoginFormValues) => {
     loginMutation.mutate(values);

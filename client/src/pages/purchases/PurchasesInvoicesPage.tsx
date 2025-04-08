@@ -41,12 +41,13 @@ export default function PurchasesInvoicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/invoices"],
+    queryKey: ["/api/invoices", "purchase"], // Updated query key
     queryFn: async () => {
       // Filter for purchase invoices only (type: "purchase")
       const res = await fetch("/api/invoices?type=purchase");
       return await res.json();
     },
+    staleTime: 0, // optional: refetch every time for testing
   });
 
   // Filter invoices based on search query

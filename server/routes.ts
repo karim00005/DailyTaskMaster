@@ -645,10 +645,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Invoice not found" });
       }
       
-      res.status(204).end();
+      // Send a successful response with a message
+      res.json({ message: "Invoice deleted successfully" });
     } catch (error) {
       console.error("Error deleting invoice:", error);
-      res.status(500).json({ message: "Failed to delete invoice" });
+      res.status(500).json({ 
+        message: "Failed to delete invoice",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
     }
   });
 
