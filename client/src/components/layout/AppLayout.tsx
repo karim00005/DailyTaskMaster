@@ -46,9 +46,7 @@ type NavItem = {
 export function AppLayout({ children }: AppLayoutProps) {
   const [, navigate] = useLocation();
   const { user, logoutMutation } = useAuth();
-  const isMobile = useIsMobile();
   const [location] = useLocation();
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
 
   const handleLogout = () => {
     logoutMutation.mutate();
@@ -121,189 +119,102 @@ export function AppLayout({ children }: AppLayoutProps) {
     },
   ];
 
-  const toggleSubmenu = (label: string) => {
-    if (openSubmenu === label) {
-      setOpenSubmenu(null);
-    } else {
-      setOpenSubmenu(label);
-    }
-  };
-
   const isActive = (href: string) => {
     if (href === "/") return location === "/";
     return location.startsWith(href);
   };
 
-  const renderNavItems = () => {
+  // Render navigation items in the header
+  const renderNavDropdowns = () => {
     return navItems.map((item) => {
       // Skip admin-only items for non-admin users
       if (item.adminOnly && user?.role !== "admin") return null;
 
       if (item.submenu) {
         return (
-          <div key={item.label} className="w-full">
-            <button
-              onClick={() => toggleSubmenu(item.label)}
-              className={`flex items-center justify-between w-full px-4 py-2 rounded-md ${
-                isActive(item.href)
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted"
-              }`}
-            >
-              <div className="flex items-center">
+          <DropdownMenu key={item.label}>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant={isActive(item.href) ? "default" : "ghost"} 
+                className="flex items-center gap-1"
+              >
                 {item.icon}
-                <span className="mr-2">{item.label}</span>
-              </div>
-              <ChevronDown
-                className={`h-4 w-4 transition-transform ${
-                  openSubmenu === item.label ? "transform rotate-180" : ""
-                }`}
-              />
-            </button>
-            {openSubmenu === item.label && (
-              <div className="mr-4 mt-1 border-r pr-4 py-1">
-                {item.submenu.map((subItem) => (
-                  <Link
-                    key={subItem.href}
+                <span className="mr-1">{item.label}</span>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {item.submenu.map((subItem) => (
+                <DropdownMenuItem key={subItem.href} asChild>
+                  <Link 
                     href={subItem.href}
-                    className={`block px-4 py-2 text-sm rounded-md ${
-                      location === subItem.href
-                        ? "bg-primary/10 text-primary"
-                        : "hover:bg-muted"
-                    }`}
+                    className={location === subItem.href ? "bg-primary/10 text-primary font-medium" : ""}
                   >
                     {subItem.label}
                   </Link>
-                ))}
-              </div>
-            )}
-          </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       }
 
       return (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={`flex items-center px-4 py-2 rounded-md ${
-            isActive(item.href)
-              ? "bg-primary text-primary-foreground"
-              : "hover:bg-muted"
-          }`}
-        >
-          {item.icon}
-          <span className="mr-2">{item.label}</span>
+        <Link key={item.href} href={item.href}>
+          <Button 
+            variant={isActive(item.href) ? "default" : "ghost"} 
+            className="flex items-center gap-1"
+          >
+            {item.icon}
+            <span className="mr-1">{item.label}</span>
+          </Button>
         </Link>
       );
     });
   };
 
-  // Sidebar content used in both desktop and mobile views
-  const sidebarContent = (
-    <div className="h-full flex flex-col space-y-4">
-      <div className="p-4 border-b">
-        <h1 className="text-2xl font-bold text-center">نظام إدارة المبيعات</h1>
-      </div>
-      <div className="flex-1 py-2 overflow-auto">
-        <nav className="space-y-1 px-2">{renderNavItems()}</nav>
-      </div>
-      <div className="p-4 border-t mt-auto">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-              {user?.fullName?.[0] || <User className="h-4 w-4" />}
-            </div>
-            <div className="mr-2">
-              <p className="text-sm font-medium">{user?.fullName}</p>
-              <p className="text-xs text-muted-foreground">{user?.role}</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-1">
-            <ThemeToggle />
-            <RtlToggle />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              title="تسجيل الخروج"
-            >
-              <LogOut className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      {/* Desktop Sidebar */}
-      {!isMobile && (
-        <aside className="hidden md:block w-64 border-l overflow-y-auto">
-          {sidebarContent}
-        </aside>
-      )}
+    <div className="flex flex-col h-screen bg-background overflow-hidden">
+      {/* Header for all devices */}
+      <header className="py-2 px-4 border-b flex flex-wrap items-center justify-between">
+        <div className="flex items-center">
+          <h1 className="text-xl font-bold ml-4">نظام إدارة المبيعات</h1>
+        </div>
+        
+        <div className="flex-1 overflow-x-auto flex items-center justify-start px-2 gap-1 my-1">
+          {renderNavDropdowns()}
+        </div>
+
+        <div className="flex items-center gap-1">
+          <ThemeToggle />
+          <RtlToggle />
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                  {user?.fullName?.[0] || <User className="h-4 w-4" />}
+                </div>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem>
+                <User className="h-4 w-4 ml-2" />
+                <span>{user?.fullName}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="h-4 w-4 ml-2" />
+                <span>تسجيل الخروج</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header for mobile */}
-        {isMobile && (
-          <header className="py-2 px-4 border-b flex items-center justify-between">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="p-0 w-64">
-                {sidebarContent}
-              </SheetContent>
-            </Sheet>
-
-            <h1 className="text-xl font-bold">نظام إدارة المبيعات</h1>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-                    {user?.fullName?.[0] || <User className="h-4 w-4" />}
-                  </div>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem>
-                  <User className="h-4 w-4 ml-2" />
-                  <span>{user?.fullName}</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <div className="flex justify-between items-center cursor-default">
-                    <div className="flex items-center">
-                      <span className="mr-2">الوضع المظلم</span>
-                    </div>
-                    <ThemeToggle />
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <div className="flex justify-between items-center cursor-default">
-                    <div className="flex items-center">
-                      <span className="mr-2">اتجاه النص</span>
-                    </div>
-                    <RtlToggle />
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="h-4 w-4 ml-2" />
-                  <span>تسجيل الخروج</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </header>
-        )}
-
-        {/* Page content */}
-        <div className="flex-1 overflow-y-auto">{children}</div>
+      <main className="flex-1 overflow-y-auto">
+        {children}
       </main>
     </div>
   );

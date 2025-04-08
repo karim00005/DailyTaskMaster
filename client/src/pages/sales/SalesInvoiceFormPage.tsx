@@ -290,12 +290,38 @@ export default function SalesInvoiceFormPage() {
   // Create/Update mutation
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
+      const formattedData = {
+        invoice: {
+          invoiceNumber: data.invoiceNumber,
+          clientId: data.clientId,
+          date: data.date,
+          dueDate: data.dueDate,
+          invoiceType: "فاتورة بيع", // نوع الفاتورة مبيعات
+          status: "تم التسليم",
+          subTotal: data.subtotal,
+          discount: data.discount || 0,
+          tax: data.tax || 0,
+          total: data.total,
+          paid: data.paid || 0,
+          due: (data.total - (data.paid || 0)).toString(),
+          notes: data.notes
+        },
+        items: data.items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity.toString(),
+          price: item.price.toString(),
+          total: (item.quantity * item.price).toString(),
+          discount: "0",
+          tax: "0"
+        }))
+      };
+
       if (isEditMode) {
         // Update existing invoice
-        return apiRequest("PATCH", `/api/invoices/${id}`, data).then(res => res.json());
+        return apiRequest("PATCH", `/api/invoices/${id}`, formattedData.invoice).then(res => res.json());
       } else {
         // Create new invoice
-        return apiRequest("POST", "/api/invoices", data).then(res => res.json());
+        return apiRequest("POST", "/api/invoices", formattedData).then(res => res.json());
       }
     },
     onSuccess: () => {
@@ -311,6 +337,7 @@ export default function SalesInvoiceFormPage() {
       navigate("/sales/invoices");
     },
     onError: (error) => {
+      console.error("Error saving invoice:", error);
       toast({
         title: "حدث خطأ",
         description: error.message,
