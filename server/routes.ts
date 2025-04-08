@@ -848,6 +848,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log("Creating transaction with data:", validatedData.data);
       const newTransaction = await storage.createTransaction(validatedData.data);
+      
+      // Update client balance if this transaction affects a client
+      if (newTransaction.clientId) {
+        await storage.updateClientBalance(
+          newTransaction.clientId,
+          parseFloat(newTransaction.amount),
+          newTransaction.type === "income" ? "credit" : "debit",
+          newTransaction.id,
+          newTransaction.description || ""
+        );
+      }
+
       res.status(201).json(newTransaction);
     } catch (error) {
       console.error("Error creating transaction:", error);

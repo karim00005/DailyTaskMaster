@@ -337,11 +337,11 @@ export default function SalesReportPage() {
                     <TableCell>{(invoice.paid || 0).toLocaleString()} جم</TableCell>
                     <TableCell>{(invoice.total - (invoice.paid || 0)).toLocaleString()} جم</TableCell>
                     <TableCell>
-                      {invoice.paid >= invoice.total ? (
+                      {parseFloat(invoice.paid || "0") >= invoice.total ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           مدفوع بالكامل
                         </span>
-                      ) : invoice.paid > 0 ? (
+                      ) : parseFloat(invoice.paid || "0") > 0 ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                           مدفوع جزئياً
                         </span>

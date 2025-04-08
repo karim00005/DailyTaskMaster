@@ -93,7 +93,7 @@ const formSchema = insertInvoiceSchema.extend({
   clientId: z.number({
     required_error: "يجب اختيار المورد",
   }),
-  userId: z.number(),  // Add this line
+  userId: z.number(),
   clientName: z.string(),
   date: z.date(),
   dueDate: z.date().optional(),
@@ -104,6 +104,7 @@ const formSchema = insertInvoiceSchema.extend({
   total: z.number(),
   notes: z.string().optional(),
   paid: z.number().default(0),
+  invoiceType: z.string().default("فاتورة شراء") // Add this line
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -162,6 +163,7 @@ export default function PurchasesInvoiceFormPage() {
       userId: user?.id || 0, // Use actual user ID from stored user
       clientName: "",
       date: new Date(),
+      invoiceType: "فاتورة شراء", // Add this line
       items: [],
       subtotal: 0,
       discount: 0,
@@ -303,10 +305,10 @@ export default function PurchasesInvoiceFormPage() {
         invoice: {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
-          userId: user?.id || 0, // Use actual user ID
-          clientName: data.clientName, // Ensure clientName is included
+          userId: user?.id || 0,
+          clientName: data.clientName,
           date: format(data.date, "yyyy-MM-dd"),
-          invoiceType: "فاتورة شراء", // نوع الفاتورة مشتريات
+          invoiceType: "فاتورة شراء", // Fixed invoice type
           status: "pending",
           paymentMethod: "cash",
           subTotal: data.subtotal.toString(),
@@ -321,7 +323,7 @@ export default function PurchasesInvoiceFormPage() {
           productId: item.productId,
           quantity: item.quantity.toString(),
           price: item.price.toString(),
-          total: (item.quantity * item.price).toString(),
+          total: item.total.toString(),
           discount: "0",
           tax: "0"
         }))

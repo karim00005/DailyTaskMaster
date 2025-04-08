@@ -45,6 +45,7 @@ import {
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { Transaction } from "@shared/schema";
+import { getTransactions } from "@/lib/api";
 
 export default function TransactionsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -54,9 +55,22 @@ export default function TransactionsPage() {
   }>({});
   const [transactionType, setTransactionType] = useState<string | null>(null);
   
-  const { data: transactions, isLoading } = useQuery<Transaction[]>({
+  const { data: transactions, isLoading, error } = useQuery({
     queryKey: ["/api/transactions"],
+    queryFn: getTransactions,
+    onError: (error) => {
+      console.error("Failed to fetch transactions:", error);
+    }
   });
+
+  if (error) {
+    console.error("Error loading transactions:", error);
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <p className="text-red-500">Failed to load transactions</p>
+      </div>
+    );
+  }
 
   // Filter transactions based on search query, date range, and type
   const filteredTransactions = transactions?.filter(transaction => {

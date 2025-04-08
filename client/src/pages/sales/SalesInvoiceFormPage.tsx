@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getClientBalance, updateClientBalanceFromInvoice } from "@/lib/clientUtils";
 import { 
   Client, 
   Product, 
@@ -92,7 +93,7 @@ const formSchema = insertInvoiceSchema.extend({
   clientId: z.number({
     required_error: "يجب اختيار العميل",
   }),
-  clientName: z.string(),
+  clientName: z.string().min(1, "اسم العميل مطلوب"),
   date: z.date(),
   dueDate: z.date().optional(),
   items: z.array(invoiceItemSchema).min(1, "يجب إضافة منتج واحد على الأقل"),
@@ -117,6 +118,8 @@ export default function SalesInvoiceFormPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productQuantity, setProductQuantity] = useState(1);
   const [productPrice, setProductPrice] = useState(0);
+  const [selectedProductStock, setSelectedProductStock] = useState(0);
+  const [clientBalance, setClientBalance] = useState("0");
 
   // Fetch invoice data if in edit mode
   const { data: invoice, isLoading: isLoadingInvoice } = useQuery<Invoice & { items: InvoiceItem[] }>({
@@ -156,7 +159,7 @@ export default function SalesInvoiceFormPage() {
       total: 0,
       paid: 0,
       notes: "",
-    },
+    }
   });
 
   // Set up field array for invoice items
@@ -178,6 +181,21 @@ export default function SalesInvoiceFormPage() {
     
     return { subtotal, total };
   };
+
+  // Combined form watch effect for both logging and calculations
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      // Log all form changes
+      console.log("Form data changed:", value);
+      
+      // Handle tax/discount/items changes
+      if (name === "tax" || name === "discount" || name?.startsWith("items")) {
+        calculateTotals();
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, [form.watch]);
 
   // Add a product to the invoice
   const addProduct = () => {
@@ -212,17 +230,6 @@ export default function SalesInvoiceFormPage() {
     calculateTotals();
   };
 
-  // Listen for tax or discount changes
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "tax" || name === "discount" || name?.startsWith("items")) {
-        calculateTotals();
-      }
-    });
-    
-    return () => subscription.unsubscribe();
-  }, [form.watch]);
-
   // Update form with invoice data when it's loaded
   useEffect(() => {
     if (invoice && invoice.items) {
@@ -230,7 +237,7 @@ export default function SalesInvoiceFormPage() {
       form.reset({
         invoiceNumber: invoice.invoiceNumber,
         clientId: invoice.clientId || 0,
-        clientName: client?.name || "", // Set client name from found client
+        clientName: client ? client.name : "",
         date: new Date(invoice.date),
         subtotal: parseFloat(invoice.subTotal) || 0,
         discount: parseFloat(invoice.discount || "0") || 0,
@@ -258,9 +265,17 @@ export default function SalesInvoiceFormPage() {
     const subscription = form.watch((value, { name }) => {
       if (name === "clientId") {
         const clientId = form.getValues("clientId");
+        console.log("Client ID changed to:", clientId);
         const client = clients?.find(c => c.id === clientId);
+        console.log("Found client:", client);
         if (client) {
+          console.log("Setting client name to:", client.name);
           form.setValue("clientName", client.name);
+        }
+        if (clientId) {
+          getClientBalance(clientId).then(balance => {
+            setClientBalance(balance);
+          });
         }
       }
     });
@@ -271,6 +286,7 @@ export default function SalesInvoiceFormPage() {
   // Update product price when product is selected
   useEffect(() => {
     if (selectedProduct) {
+      setSelectedProductStock(parseFloat(selectedProduct.currentStock) || 0);
       setProductPrice(parseFloat(selectedProduct.sellPrice) || 0);
     }
   }, [selectedProduct]);
@@ -278,11 +294,12 @@ export default function SalesInvoiceFormPage() {
   // Create/Update mutation
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
+      console.log("Mutation starting with data:", data);
       const formattedData = {
         invoice: {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
-          clientName: data.clientName, // Make sure to include clientName
+          clientName: data.clientName,
           date: format(data.date, "yyyy-MM-dd"),
           invoiceType: "فاتورة بيع",
           status: "pending",
@@ -305,21 +322,24 @@ export default function SalesInvoiceFormPage() {
         }))
       };
 
-      if (isEditMode) {
-        // For updates, send just the invoice data
-        const response = await apiRequest("PATCH", `/api/invoices/${id}`, formattedData.invoice);
-        if (!response.ok) {
-          throw new Error("Failed to update invoice");
-        }
-        return response.json();
-      } else {
-        // For new invoices, send both invoice and items
-        const response = await apiRequest("POST", "/api/invoices", formattedData);
-        if (!response.ok) {
-          throw new Error("Failed to create invoice");
-        }
-        return response.json();
+      console.log("Formatted data for API:", formattedData);
+
+      const response = isEditMode
+        ? await apiRequest("PATCH", `/api/invoices/${id}`, formattedData.invoice)
+        : await apiRequest("POST", "/api/invoices", formattedData);
+        
+      if (!response.ok) {
+        throw new Error(isEditMode ? "Failed to update invoice" : "Failed to create invoice");
       }
+      
+      // Update client balance
+      await updateClientBalanceFromInvoice(
+        data.clientId,
+        data.total,
+        true // Credit increases balance
+      );
+      
+      return response.json();
     },
     onSuccess: () => {
       // Invalidate both general and sales-specific queries
@@ -347,6 +367,15 @@ export default function SalesInvoiceFormPage() {
   // Delete invoice mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
+      if (!invoice) throw new Error("No invoice data");
+      
+      // Update client balance before deleting
+      await updateClientBalanceFromInvoice(
+        invoice.clientId,
+        parseFloat(invoice.total),
+        false // Debit decreases balance
+      );
+      
       return apiRequest("DELETE", `/api/invoices/${id}`).then(res => res.json());
     },
     onSuccess: () => {
@@ -372,28 +401,24 @@ export default function SalesInvoiceFormPage() {
 
   // Form submission handler
   const onSubmit = (values: FormValues) => {
-    console.log("Submit handler called."); // New log
-    debugger; // Force debugger pause if DevTools is open
-    console.log("onSubmit called with values:", values);
+    console.log("Form submitted with values:", values);
+    console.log("Client name value:", values.clientName);
     
-    // Convert date if necessary
-    if (!(values.date instanceof Date)) {
-      console.warn("Converting date from:", values.date);
-      values.date = new Date(values.date);
-    }
-    
-    // Ensure the date field is valid
-    if (!values.date || isNaN(values.date.getTime())) {
-      console.error("Invalid date value:", values.date);
+    // Validate required fields
+    if (!values.clientId || !values.clientName) {
+      console.error("Missing required client data:", { clientId: values.clientId, clientName: values.clientName });
       toast({
         title: "خطأ في البيانات",
-        description: "يرجى اختيار تاريخ صالح.",
-        variant: "destructive",
+        description: "يرجى اختيار العميل",
+        variant: "destructive"
       });
       return;
     }
-    
-    // Proceed with submission
+
+    // Log form state
+    console.log("Form state:", form.formState);
+    console.log("Form errors:", form.formState.errors);
+
     mutation.mutate(values);
   };
 
@@ -467,21 +492,29 @@ export default function SalesInvoiceFormPage() {
                       <FormItem>
                         <FormLabel htmlFor="clientId">العميل *</FormLabel>
                         <FormControl>
-                          {/* Pass id here so that the underlying input has it */}
+                          {/* Remove id from Combobox */}
                           <Combobox
-                            id="clientId"
                             options={clients?.map(client => ({
                               value: client.id.toString(),
                               label: client.name
                             })) || []}
                             value={field.value?.toString() || ""}
-                            onChange={(value) => field.onChange(parseInt(value))}
+                            onChange={(value) => {
+                              field.onChange(parseInt(value));
+                              const client = clients?.find(c => c.id === parseInt(value));
+                              if (client) {
+                                form.setValue("clientName", client.name);
+                              }
+                            }}
                             placeholder="اختر العميل"
                             emptyMessage="لا يوجد عملاء مطابقين"
                             searchPlaceholder="ابحث عن عميل..."
                           />
                         </FormControl>
                         <FormMessage />
+                        <div className="text-sm text-muted-foreground mt-1">
+                          رصيد العميل: {parseFloat(clientBalance).toLocaleString()} جم
+                        </div>
                       </FormItem>
                     )}
                   />
@@ -597,8 +630,8 @@ export default function SalesInvoiceFormPage() {
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                     <div className="space-y-2">
                       <Label htmlFor="product">المنتج</Label>
+                      {/* Remove id from Combobox */}
                       <Combobox
-                        id="product"
                         options={products?.map(product => ({
                           value: product.id.toString(),
                           label: product.name
@@ -622,6 +655,11 @@ export default function SalesInvoiceFormPage() {
                         value={productQuantity}
                         onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
                       />
+                      {selectedProduct && (
+                        <div className="text-sm text-muted-foreground mt-1">
+                          الكمية المتاحة: {selectedProductStock.toLocaleString()}
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="price">السعر</Label>

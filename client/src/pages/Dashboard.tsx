@@ -6,6 +6,14 @@ import { apiRequest } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useState } from "react";
 
 type DashboardStats = {
@@ -28,6 +36,11 @@ type Client = {
   name: string;
   balance: string;
   clientType: string;
+  balanceHistory?: {
+    amount: string;
+    type: string;
+    date: string;
+  }[];
 };
 
 type Product = {
@@ -58,7 +71,7 @@ export default function Dashboard() {
   const { data: clients, isLoading: clientsLoading } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/clients");
+      const res = await apiRequest("GET", "/api/clients?include=balanceHistory");
       return res.json();
     },
   });
@@ -74,14 +87,77 @@ export default function Dashboard() {
 
   const isLoading = statsLoading || clientsLoading || productsLoading;
 
-  // Filter clients with non-zero balance and by search term
+  // Log the raw clients data
+  console.log("Raw clients data:", clients);
+
+  // Calculate balances using balance history
+  const calculateBalance = (client: Client) => {
+    if (!client.balanceHistory?.length) return 0;
+    const latestBalance = client.balanceHistory[0];
+    return parseFloat(latestBalance.amount);
+  };
+
+  // Updated balance calculations with proper parsing and filtering
   const filteredClients = (clients || [])
-    .filter(client => client.balance !== "0" && parseFloat(client.balance) !== 0)
-    .filter(client => client.name.includes(clientSearch));
-  
+    .filter(client => {
+      const balance = calculateBalance(client);
+      return balance !== 0;
+    })
+    .filter(client => 
+      client.name?.toLowerCase().includes(clientSearch.toLowerCase())
+    );
+
+  // Log the filtered clients data
+  console.log("Filtered clients data:", filteredClients);
+
   // Filter products by search term
   const filteredProducts = (products || [])
     .filter(product => product.name.includes(productSearch));
+
+  // Calculate total client/supplier balances with better parsing
+  const clientsCredit = (clients || [])
+    .filter(client => client.clientType !== "مورد")
+    .reduce((total, client) => {
+      const balance = parseFloat(client.balance?.replace(/,/g, '') || "0");
+      return total + (balance > 0 ? balance : 0);
+    }, 0);
+
+  const clientsDebit = (clients || [])
+    .filter(client => client.clientType !== "مورد")
+    .reduce((total, client) => {
+      const balance = parseFloat(client.balance?.replace(/,/g, '') || "0");
+      return total + (balance < 0 ? Math.abs(balance) : 0);
+    }, 0);
+
+  const suppliersCredit = (clients || [])
+    .filter(client => client.clientType === "مورد")
+    .reduce((total, client) => {
+      const balance = parseFloat(client.balance?.replace(/,/g, '') || "0");
+      return total + (balance > 0 ? balance : 0);
+    }, 0);
+
+  const suppliersDebit = (clients || [])
+    .filter(client => client.clientType === "مورد")
+    .reduce((total, client) => {
+      const balance = parseFloat(client.balance?.replace(/,/g, '') || "0");
+      return total + (balance < 0 ? Math.abs(balance) : 0);
+    }, 0);
+
+  // Updated top balances calculation
+  const topBalances = (clients || [])
+    .filter(client => {
+      const balance = parseFloat(client.balance?.replace(/,/g, '') || "0");
+      return !isNaN(balance) && balance !== 0;
+    })
+    .sort((a, b) => {
+      const balanceA = Math.abs(parseFloat(a.balance?.replace(/,/g, '') || "0"));
+      const balanceB = Math.abs(parseFloat(b.balance?.replace(/,/g, '') || "0"));
+      return balanceB - balanceA;
+    })
+    .slice(0, 5);
+    
+  // Log the top balances data
+  console.log("Top balances data:", topBalances);
 
   if (isLoading) {
     return (
@@ -101,77 +177,48 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-sm text-muted-foreground">
               إجمالي أرصدة العملاء (مدين)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center">
-              <Wallet className="h-5 w-5 text-primary ml-2" />
-              <div className="text-2xl font-bold">
-                {(clients || [])
-                  .filter(client => parseFloat(client.balance) > 0)
-                  .reduce((total, client) => total + parseFloat(client.balance), 0)
-                  .toLocaleString()} جم
-              </div>
-            </div>
+            <div className="text-2xl font-bold">{clientsDebit.toLocaleString()} جم</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-sm text-muted-foreground">
+              إجمالي أرصدة العملاء (دائن)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{clientsCredit.toLocaleString()} جم</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">
+              إجمالي أرصدة الموردين (مدين)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{suppliersDebit.toLocaleString()} جم</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">
               إجمالي أرصدة الموردين (دائن)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center">
-              <Wallet className="h-5 w-5 text-destructive ml-2" />
-              <div className="text-2xl font-bold">
-                {Math.abs((clients || [])
-                  .filter(client => parseFloat(client.balance) < 0)
-                  .reduce((total, client) => total + parseFloat(client.balance), 0))
-                  .toLocaleString()} جم
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              قيمة المخزون الحالي
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center">
-              <Package className="h-5 w-5 text-primary ml-2" />
-              <div className="text-2xl font-bold">
-                {(products || [])
-                  .reduce((total, product) => 
-                    total + (parseFloat(product.currentStock) * parseFloat(product.buyPrice)), 0)
-                  .toLocaleString()} جم
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              المنتجات قليلة المخزون
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center">
-              <AlertTriangle className="h-5 w-5 text-destructive ml-2" />
-              <div className="text-2xl font-bold">
-                {(stats?.lowStockProducts?.length || 0)}
-              </div>
-            </div>
+            <div className="text-2xl font-bold">{suppliersCredit.toLocaleString()} جم</div>
           </CardContent>
         </Card>
       </div>
@@ -289,6 +336,52 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Top Balances Table */}
+      {topBalances.length > 0 ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>العملاء والموردين ذوي الأرصدة</CardTitle>
+            <CardDescription>أعلى 5 عملاء وموردين من حيث قيمة الرصيد</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>الاسم</TableHead>
+                  <TableHead>النوع</TableHead>
+                  <TableHead>الرصيد</TableHead>
+                  <TableHead>الحالة</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topBalances.map(client => (
+                  <TableRow key={client.id}>
+                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell>
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        client.clientType === "مورد" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800"
+                      }`}>
+                        {client.clientType || "عميل"}
+                      </span>
+                    </TableCell>
+                    <TableCell className={`font-medium ${parseFloat(client.balance || "0") > 0 ? "text-green-600" : "text-red-600"}`}>
+                      {Math.abs(parseFloat(client.balance || "0")).toLocaleString()} جم
+                    </TableCell>
+                    <TableCell>
+                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                        parseFloat(client.balance || "0") > 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                      }`}>
+                        {parseFloat(client.balance || "0") > 0 ? "دائن" : "مدين"}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Low Stock Alert */}
       {stats?.lowStockProducts && stats.lowStockProducts.length > 0 && (

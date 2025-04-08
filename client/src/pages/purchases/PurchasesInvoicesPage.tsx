@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 import { 
   Table, 
   TableBody, 
@@ -41,14 +42,48 @@ export default function PurchasesInvoicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
-    queryKey: ["/api/invoices", "purchase"], // Updated query key
+    queryKey: ["/api/invoices", "purchase"],
     queryFn: async () => {
-      // Filter for purchase invoices only (type: "purchase")
-      const res = await fetch("/api/invoices?type=purchase");
-      return await res.json();
-    },
-    staleTime: 0, // optional: refetch every time for testing
+      try {
+        const [invoicesRes, clientsRes] = await Promise.all([
+          apiRequest("GET", "/api/invoices?type=فاتورة شراء"),
+          apiRequest("GET", "/api/clients")
+        ]);
+
+        const invoicesData = await invoicesRes.json();
+        const clientsData = await clientsRes.json();
+
+        // Filter suppliers only
+        const suppliers = clientsData.filter((c: Client) => c.clientType === "مورد");
+
+        return invoicesData.map((invoice: Invoice) => {
+          const supplier = suppliers.find(s => s.id === invoice.clientId);
+          return {
+            ...invoice,
+            clientName: supplier?.name || "غير محدد"
+          };
+        });
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        throw error;
+      }
+    }
   });
+
+  // Form submission handler
+  const onSubmit = (values: FormValues) => {
+    if (!values.clientId || !values.clientName) {
+      toast({
+        title: "خطأ في البيانات",
+        description: "يرجى اختيار المورد",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    console.log("Submitting form with values:", values);
+    mutation.mutate(values);
+  };
 
   // Filter invoices based on search query
   const filteredInvoices = invoices?.filter(invoice => 
@@ -129,11 +164,11 @@ export default function PurchasesInvoicesPage() {
                     <TableCell>{invoice.paid?.toLocaleString()} جم</TableCell>
                     <TableCell>{(invoice.total - invoice.paid)?.toLocaleString()} جم</TableCell>
                     <TableCell>
-                      {invoice.paid >= invoice.total ? (
+                      {parseFloat(invoice.paid || "0") >= parseFloat(invoice.total?.toString() || "0") ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           مدفوع بالكامل
                         </span>
-                      ) : invoice.paid > 0 ? (
+                      ) : parseFloat(invoice.paid || "0") > 0 ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                           مدفوع جزئياً
                         </span>

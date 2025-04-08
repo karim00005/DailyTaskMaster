@@ -1,5 +1,5 @@
 import { 
-  users, clients, products, warehouses, invoices, invoiceItems, transactions, settings,
+  users, clients, products, warehouses, invoices, invoiceItems, transactions, settings, balanceHistory,
   type User, type InsertUser, 
   type Client, type InsertClient,
   type Product, type InsertProduct,
@@ -7,7 +7,8 @@ import {
   type Invoice, type InsertInvoice,
   type InvoiceItem, type InsertInvoiceItem,
   type Transaction, type InsertTransaction,
-  type Settings, type InsertSettings
+  type Settings, type InsertSettings,
+  type BalanceHistory
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql } from "drizzle-orm";
@@ -81,6 +82,17 @@ export interface IStorage {
   // Statistics
   getDashboardStats(): Promise<any>;
   
+  // Balance methods
+  getClientBalance(clientId: number): Promise<string>;
+  getBalanceHistory(clientId: number): Promise<BalanceHistory[]>;
+  updateClientBalance(
+    clientId: number, 
+    amount: number, 
+    type: string, 
+    transactionId: number,
+    description: string
+  ): Promise<Client>;
+
   // Session store
   sessionStore: session.Store;
 }
@@ -561,24 +573,84 @@ export class DatabaseStorage implements IStorage {
 
   // Transaction methods
   async getTransaction(id: number): Promise<Transaction | undefined> {
-    const [transaction] = await db.select().from(transactions).where(eq(transactions.id, id));
+    const [transaction] = await db.select({
+      id: transactions.id,
+      transactionNumber: transactions.transactionNumber,
+      type: transactions.type,
+      transactionType: transactions.transactionType,
+      clientId: transactions.clientId,
+      invoiceId: transactions.invoiceId,
+      userId: transactions.userId,
+      date: transactions.date,
+      amount: transactions.amount,
+      paymentMethod: transactions.paymentMethod,
+      referenceNumber: transactions.referenceNumber,
+      description: transactions.description,
+      notes: transactions.notes,
+      clientName: clients.name
+    })
+    .from(transactions)
+    .leftJoin(clients, eq(transactions.clientId, clients.id))
+    .where(eq(transactions.id, id));
     return transaction;
   }
 
   async createTransaction(transactionData: InsertTransaction): Promise<Transaction> {
-    // Generate transaction number if not provided
-    if (!transactionData.transactionNumber) {
-      const date = new Date();
-      const year = date.getFullYear().toString().slice(-2);
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const count = await db.select({ count: sql<number>`count(*)` }).from(transactions);
-      const nextNum = (count[0].count + 1).toString().padStart(4, '0');
-      
-      transactionData.transactionNumber = `TRX-${year}${month}-${nextNum}`;
+    try {
+      // Generate number first
+      if (!transactionData.transactionNumber) {
+        const date = new Date();
+        const year = date.getFullYear().toString().slice(-2);
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const [{count}] = await db.select({
+          count: sql<number>`count(*)`
+        }).from(transactions);
+        transactionData.transactionNumber = `TRX-${year}${month}-${(count + 1).toString().padStart(4, '0')}`;
+      }
+
+      // Insert transaction
+      const [transaction] = await db.insert(transactions)
+        .values(transactionData)
+        .returning();
+
+      // Handle balance updates if needed
+      if (transaction.clientId) {
+        const [currentBalance] = await db
+          .select({ newBalance: balanceHistory.newBalance })
+          .from(balanceHistory)
+          .where(eq(balanceHistory.clientId, transaction.clientId))
+          .orderBy(desc(balanceHistory.date))
+          .limit(1);
+
+        const previousBalance = parseFloat(currentBalance?.newBalance || "0");
+        const amount = parseFloat(transaction.amount.toString());
+        const newBalance = transaction.type === "income" 
+          ? previousBalance + amount 
+          : previousBalance - amount;
+
+        // Create balance history
+        await db.insert(balanceHistory).values({
+          clientId: transaction.clientId,
+          transactionId: transaction.id,
+          previousBalance: previousBalance.toString(),
+          amount: transaction.amount.toString(),
+          newBalance: newBalance.toString(),
+          type: transaction.type === "income" ? "credit" : "debit",
+          description: transaction.description || ""
+        });
+
+        // Update client balance
+        await db.update(clients)
+          .set({ balance: newBalance.toString() })
+          .where(eq(clients.id, transaction.clientId));
+      }
+
+      return transaction;
+
+    } catch (error) {
+      console.error("Transaction creation error:", error);
+      throw new Error(`Failed to create transaction: ${error.message}`);
     }
-    
-    const [transaction] = await db.insert(transactions).values(transactionData).returning();
-    return transaction;
   }
 
   async updateTransaction(id: number, transactionUpdate: Partial<InsertTransaction>): Promise<Transaction | undefined> {
@@ -596,33 +668,99 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
-    return db.select().from(transactions).orderBy(desc(transactions.date));
+    return db.select({
+      id: transactions.id,
+      transactionNumber: transactions.transactionNumber,
+      type: transactions.type,
+      transactionType: transactions.transactionType,
+      clientId: transactions.clientId,
+      invoiceId: transactions.invoiceId,
+      userId: transactions.userId,
+      date: transactions.date,
+      amount: transactions.amount,
+      paymentMethod: transactions.paymentMethod,
+      referenceNumber: transactions.referenceNumber,
+      description: transactions.description,
+      notes: transactions.notes,
+      clientName: clients.name
+    })
+    .from(transactions)
+    .leftJoin(clients, eq(transactions.clientId, clients.id))
+    .orderBy(desc(transactions.date));
   }
 
   async getTransactionsByClient(clientId: number): Promise<Transaction[]> {
-    return db.select()
-      .from(transactions)
-      .where(eq(transactions.clientId, clientId))
-      .orderBy(desc(transactions.date));
+    return db.select({
+      id: transactions.id,
+      transactionNumber: transactions.transactionNumber,
+      type: transactions.type,
+      transactionType: transactions.transactionType,
+      clientId: transactions.clientId,
+      invoiceId: transactions.invoiceId,
+      userId: transactions.userId,
+      date: transactions.date,
+      amount: transactions.amount,
+      paymentMethod: transactions.paymentMethod,
+      referenceNumber: transactions.referenceNumber,
+      description: transactions.description,
+      notes: transactions.notes,
+      clientName: clients.name
+    })
+    .from(transactions)
+    .leftJoin(clients, eq(transactions.clientId, clients.id))
+    .where(eq(transactions.clientId, clientId))
+    .orderBy(desc(transactions.date));
   }
 
   async getTransactionsByType(type: string): Promise<Transaction[]> {
-    return db.select()
-      .from(transactions)
-      .where(eq(transactions.transactionType, type))
-      .orderBy(desc(transactions.date));
+    return db.select({
+      id: transactions.id,
+      transactionNumber: transactions.transactionNumber,
+      type: transactions.type,
+      transactionType: transactions.transactionType,
+      clientId: transactions.clientId,
+      invoiceId: transactions.invoiceId,
+      userId: transactions.userId,
+      date: transactions.date,
+      amount: transactions.amount,
+      paymentMethod: transactions.paymentMethod,
+      referenceNumber: transactions.referenceNumber,
+      description: transactions.description,
+      notes: transactions.notes,
+      clientName: clients.name
+    })
+    .from(transactions)
+    .leftJoin(clients, eq(transactions.clientId, clients.id))
+    .where(eq(transactions.transactionType, type))
+    .orderBy(desc(transactions.date));
   }
 
   async getTransactionsByDate(startDate: Date, endDate: Date): Promise<Transaction[]> {
-    return db.select()
-      .from(transactions)
-      .where(
-        and(
-          sql`${transactions.date} >= ${startDate}`,
-          sql`${transactions.date} <= ${endDate}`
-        )
+    return db.select({
+      id: transactions.id,
+      transactionNumber: transactions.transactionNumber,
+      type: transactions.type,
+      transactionType: transactions.transactionType,
+      clientId: transactions.clientId,
+      invoiceId: transactions.invoiceId,
+      userId: transactions.userId,
+      date: transactions.date,
+      amount: transactions.amount,
+      paymentMethod: transactions.paymentMethod,
+      referenceNumber: transactions.referenceNumber,
+      description: transactions.description,
+      notes: transactions.notes,
+      clientName: clients.name
+    })
+    .from(transactions)
+    .leftJoin(clients, eq(transactions.clientId, clients.id))
+    .where(
+      and(
+        sql`${transactions.date} >= ${startDate}`,
+        sql`${transactions.date} <= ${endDate}`
       )
-      .orderBy(desc(transactions.date));
+    )
+    .orderBy(desc(transactions.date));
   }
 
   // Settings methods
@@ -704,6 +842,70 @@ export class DatabaseStorage implements IStorage {
       recentSales,
       lowStockProducts
     };
+  }
+
+  // Balance methods
+  async getClientBalance(clientId: number): Promise<string> {
+    // Get the latest balance from balance_history
+    const [result] = await db
+      .select({ balance: balanceHistory.newBalance })
+      .from(balanceHistory)
+      .where(eq(balanceHistory.clientId, clientId))
+      .orderBy(desc(balanceHistory.date))
+      .limit(1);
+
+    return result?.balance || "0";
+  }
+
+  async getBalanceHistory(clientId: number): Promise<BalanceHistory[]> {
+    return db
+      .select()
+      .from(balanceHistory)
+      .where(eq(balanceHistory.clientId, clientId))
+      .orderBy(desc(balanceHistory.date));
+  }
+
+  async updateClientBalance(
+    clientId: number,
+    amount: number,
+    type: string,
+    transactionId: number,
+    description: string
+  ): Promise<Client> {
+    return await db.transaction(async (tx) => {
+      // Get current balance
+      const [currentBalance] = await tx
+        .select()
+        .from(balanceHistory)
+        .where(eq(balanceHistory.clientId, clientId))
+        .orderBy(desc(balanceHistory.date))
+        .limit(1);
+
+      const previousBalance = parseFloat(currentBalance?.newBalance || "0");
+      const newBalance = type === "credit" 
+        ? previousBalance + amount 
+        : previousBalance - amount;
+
+      // Insert balance history record
+      await tx.insert(balanceHistory).values({
+        clientId,
+        transactionId,
+        previousBalance: previousBalance.toString(),
+        amount: amount.toString(),
+        newBalance: newBalance.toString(),
+        type,
+        description
+      });
+
+      // Update client's current balance
+      const [updatedClient] = await tx
+        .update(clients)
+        .set({ balance: newBalance.toString() })
+        .where(eq(clients.id, clientId))
+        .returning();
+
+      return updatedClient;
+    });
   }
 }
 

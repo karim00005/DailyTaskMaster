@@ -55,37 +55,27 @@ export default function SalesInvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   
-  const { data: clients } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
-  });
-
   const { data: invoices, isLoading } = useQuery<Invoice[]>({
     queryKey: ["/api/invoices", "sale"],
     queryFn: async () => {
       try {
-        console.log("Fetching sales invoices...");
-        const res = await apiRequest("GET", "/api/invoices?type=فاتورة بيع");
-        if (!res.ok) {
-          const errorText = await res.text();
-          console.error("API error fetching invoices:", res.status, errorText);
-          throw new Error(`API error: ${res.status} - ${errorText}`);
-        }
-        const data = await res.json();
-        
-        // Better client name handling
-        const invoicesWithClientData = data.map((invoice: Invoice) => ({
-          ...invoice,
-          clientName: invoice.clientName || "بدون اسم عميل" // Use the stored clientName directly
-        }));
+        const [invoicesRes, clientsRes] = await Promise.all([
+          apiRequest("GET", "/api/invoices?type=فاتورة بيع"),
+          apiRequest("GET", "/api/clients")
+        ]);
 
-        return invoicesWithClientData;
-      } catch (error: any) {
-        console.error("Error fetching invoices:", error);
-        toast({
-          title: "حدث خطأ أثناء جلب الفواتير",
-          description: error.message || "فشل جلب الفواتير",
-          variant: "destructive",
+        const invoicesData = await invoicesRes.json();
+        const clientsData = await clientsRes.json();
+
+        return invoicesData.map((invoice: Invoice) => {
+          const client = clientsData.find((c: Client) => c.id === invoice.clientId);
+          return {
+            ...invoice,
+            clientName: client?.name || "غير محدد"
+          };
         });
+      } catch (error) {
+        console.error("Error fetching data:", error);
         throw error;
       }
     },
@@ -228,6 +218,8 @@ export default function SalesInvoicesPage() {
                 <TableHead>رقم الفاتورة</TableHead>
                 <TableHead>العميل</TableHead>
                 <TableHead>التاريخ</TableHead>
+                <TableHead>الكمية</TableHead>
+                <TableHead>السعر الإجمالي</TableHead>
                 <TableHead>الإجمالي</TableHead>
                 <TableHead>المدفوع</TableHead>
                 <TableHead>المتبقي</TableHead>
@@ -242,15 +234,21 @@ export default function SalesInvoicesPage() {
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                     <TableCell>{invoice.clientName}</TableCell>
                     <TableCell>{formatDate(invoice.date)}</TableCell>
+                    <TableCell>
+                      {invoice.items?.reduce((sum, item) => sum + parseFloat(item.quantity), 0)?.toLocaleString() || 0}
+                    </TableCell>
+                    <TableCell>
+                      {invoice.items?.reduce((sum, item) => sum + parseFloat(item.price), 0)?.toLocaleString() || 0} جم
+                    </TableCell>
                     <TableCell>{invoice.total?.toLocaleString()} جم</TableCell>
                     <TableCell>{invoice.paid?.toLocaleString()} جم</TableCell>
                     <TableCell>{(invoice.total - invoice.paid)?.toLocaleString()} جم</TableCell>
                     <TableCell>
-                      {invoice.paid >= invoice.total ? (
+                      {parseFloat(invoice.paid || "0") >= parseFloat(invoice.total?.toString() || "0") ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                           مدفوع بالكامل
                         </span>
-                      ) : invoice.paid > 0 ? (
+                      ) : parseFloat(invoice.paid || "0") > 0 ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                           مدفوع جزئياً
                         </span>
@@ -300,7 +298,7 @@ export default function SalesInvoicesPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center h-32 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center h-32 text-muted-foreground">
                     {searchQuery ? "لا توجد نتائج تطابق البحث" : "لا توجد فواتير بيع بعد"}
                   </TableCell>
                 </TableRow>

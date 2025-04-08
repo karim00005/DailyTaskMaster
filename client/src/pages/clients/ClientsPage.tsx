@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { 
@@ -58,42 +58,12 @@ import { toast } from "@/hooks/use-toast";
 
 export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [clientTypeFilter, setClientTypeFilter] = useState<string>("all"); // "all", "عميل", "مورد"
-  
-  const { data: clients, isLoading } = useQuery<Client[]>({
-    queryKey: ["/api/clients"],
-  });
+  const [clientTypeFilter, setClientTypeFilter] = useState<string>("all");
 
-  // Filter clients based on search query and client type
-  const filteredClients = clients?.filter(client => {
-    // Apply search filter
-    const matchesSearch = 
-      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    // Apply client type filter
-    const matchesType = 
-      clientTypeFilter === "all" || 
-      client.clientType === clientTypeFilter || 
-      (!client.clientType && clientTypeFilter === "عميل"); // Default to client if not specified
-    
-    return matchesSearch && matchesType;
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
-
-  // Template for client Excel import
   const clientTemplate = [
     {
       name: "اسم العميل",
-      clientType: "عميل", // or "مورد"
+      clientType: "عميل",
       email: "example@example.com",
       phone: "01234567890",
       address: "العنوان",
@@ -102,16 +72,60 @@ export default function ClientsPage() {
     }
   ];
   
-  // Template headers for validation
   const clientHeaders = ["name", "clientType", "email", "phone", "address", "taxId", "isActive"];
   
-  // Mutation for importing clients
+  const { data: clients, isLoading, error } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+    queryFn: async () => {
+      try {
+        const res = await apiRequest("GET", "/api/clients");
+        return await res.json();
+      } catch (err) {
+        console.error("Failed to fetch clients:", err);
+        throw new Error(err instanceof Error ? err.message : "Failed to fetch clients");
+      }
+    },
+    staleTime: 30000,
+    cacheTime: 1000 * 60 * 5,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    suspense: true
+  });
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "خطأ في تحميل البيانات",
+        description: error instanceof Error ? error.message : "حدث خطأ أثناء تحميل قائمة العملاء",
+        variant: "destructive"
+      });
+    }
+  }, [error]);
+
+  const filteredClients = useMemo(() => {
+    if (!clients) return [];
+    
+    return clients.filter(client => {
+      if (!client) return false;
+      
+      const matchesSearch = !searchQuery || 
+        client.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesType = 
+        clientTypeFilter === "all" || 
+        client.clientType === clientTypeFilter || 
+        (!client.clientType && clientTypeFilter === "عميل");
+
+      return matchesSearch && matchesType;
+    });
+  }, [clients, searchQuery, clientTypeFilter]);
+
   const importClientsMutation = useMutation({
     mutationFn: async (clientsData: any[]) => {
-      // Process data
       const processedClients = clientsData.map(client => ({
         ...client,
-        // Convert string "true"/"false" to boolean if needed
         isActive: typeof client.isActive === 'string' 
           ? client.isActive.toLowerCase() === 'true' 
           : Boolean(client.isActive)
@@ -121,7 +135,6 @@ export default function ClientsPage() {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate clients query to refresh the list
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       toast({
         title: "تم استيراد العملاء بنجاح",
@@ -136,20 +149,27 @@ export default function ClientsPage() {
       });
     }
   });
-  
-  // Handle the data from Excel importer
+
   const handleClientDataImported = (data: any[]) => {
     importClientsMutation.mutate(data);
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">العملاء</h1>
+    <div>
+      <div className="flex justify-between mb-6">
+        <h1 className="text-2xl font-bold">العملاء</h1>
         <div className="flex gap-2">
           <ExcelExporter 
             data={clients || []} 
-            filename="clients-list" 
+            filename="clients-list"
             buttonText="تصدير العملاء"
           />
           <Link href="/clients/new">
@@ -160,13 +180,11 @@ export default function ClientsPage() {
           </Link>
         </div>
       </div>
-
       <Tabs defaultValue="list" className="mb-6">
         <TabsList className="mb-4">
           <TabsTrigger value="list">قائمة العملاء</TabsTrigger>
           <TabsTrigger value="import">استيراد من Excel</TabsTrigger>
         </TabsList>
-        
         <TabsContent value="list">
           <Card>
             <CardHeader className="pb-2">
@@ -211,6 +229,7 @@ export default function ClientsPage() {
                     <TableHead>البريد الإلكتروني</TableHead>
                     <TableHead>العنوان</TableHead>
                     <TableHead>الحالة</TableHead>
+                    <TableHead>حالة الدفع</TableHead>
                     <TableHead className="w-[80px]">الإجراءات</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -243,6 +262,24 @@ export default function ClientsPage() {
                           )}
                         </TableCell>
                         <TableCell>
+                          {client.balance === 0 ? (
+                            <div className="flex items-center">
+                              <CheckCircle className="h-4 w-4 text-green-500 ml-1" />
+                              <span>مدفوع بالكامل</span>
+                            </div>
+                          ) : client.balance > 0 ? (
+                            <div className="flex items-center">
+                              <XCircle className="h-4 w-4 text-yellow-500 ml-1" />
+                              <span>مدفوع جزئياً</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center">
+                              <XCircle className="h-4 w-4 text-red-500 ml-1" />
+                              <span>غير مدفوع</span>
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon">
@@ -267,7 +304,7 @@ export default function ClientsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center h-32 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center h-32 text-muted-foreground">
                         {clientTypeFilter !== "all" 
                           ? `لا يوجد ${clientTypeFilter === "عميل" ? "عملاء" : "موردين"} مطابقين للبحث` 
                           : searchQuery 
@@ -281,7 +318,6 @@ export default function ClientsPage() {
             </CardContent>
           </Card>
         </TabsContent>
-        
         <TabsContent value="import">
           <Card>
             <CardHeader>
@@ -302,7 +338,6 @@ export default function ClientsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-      
     </div>
   );
 }

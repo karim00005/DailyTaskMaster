@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "wouter";
 import { z } from "zod";
@@ -40,7 +40,8 @@ import {
   Save, 
   CalendarIcon,
   ArrowDownLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  Search
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -52,6 +53,8 @@ import {
 } from "@shared/schema";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { Combobox } from "@/components/ui/combobox";
+import { getClientBalance } from "@/lib/clientUtils";
 
 // Extend the transaction schema for form validation
 const formSchema = insertTransactionSchema.extend({
@@ -59,7 +62,9 @@ const formSchema = insertTransactionSchema.extend({
   amount: z.number().min(0.01, "يجب أن يكون المبلغ أكبر من صفر"),
   paymentMethod: z.string().min(1, "يجب اختيار طريقة الدفع"),
   date: z.date(),
-});
+  clientName: z.string().optional(),
+  type: z.enum(["income", "expense"]),
+}).omit({ transactionNumber: true });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -68,6 +73,10 @@ export default function TransactionFormPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const isEditMode = Boolean(id);
+  const [clientSearch, setClientSearch] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [month, setMonth] = useState<Date>(new Date());
+  const [clientBalance, setClientBalance] = useState("0");
 
   // Fetch transaction data if in edit mode
   const { data: transaction, isLoading: isLoadingTransaction } = useQuery<Transaction>({
@@ -80,9 +89,16 @@ export default function TransactionFormPage() {
     enabled: isEditMode,
   });
 
-  // Fetch clients for dropdown
-  const { data: clients } = useQuery<Client[]>({
+  // Fetch clients with proper error handling
+  const { data: clients, isLoading: isLoadingClients } = useQuery<Client[]>({
     queryKey: ["/api/clients"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/clients");
+      const data = await res.json();
+      console.log("Fetched clients:", data); // Debug log
+      return data;
+    },
+    staleTime: 30000, // Cache for 30 seconds
   });
 
   // Fetch invoices for dropdown
@@ -90,20 +106,42 @@ export default function TransactionFormPage() {
     queryKey: ["/api/invoices"],
   });
 
+  // Filter clients based on search
+  const filteredClients = clients?.filter(client => 
+    clientSearch === "" || 
+    client.name.toLowerCase().includes(clientSearch.toLowerCase())
+  ) || [];
+
+  // Transform clients for combobox with proper handling
+  const clientOptions = useMemo(() => {
+    const options = clients?.map(client => ({
+      value: client.id.toString(),
+      label: `${client.name}${client.phone ? ` - ${client.phone}` : ''}`
+    })) || [];
+
+    console.log("Transformed client options:", options); // Debug log
+
+    options.unshift({
+      value: "none",
+      label: "-- بدون عميل --"
+    });
+
+    return options;
+  }, [clients]);
+
   // Form definition
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      description: "",
+      description: "دفعة من الحساب",
       amount: 0,
       type: "income",
-      paymentMethod: "cash",
+      paymentMethod: "bank",
       date: new Date(),
       clientId: undefined,
       clientName: "",
-      invoiceId: undefined,
-      referenceNumber: "",
       notes: "",
+      transactionType: "صرف", // Add this
     },
   });
 
@@ -113,8 +151,11 @@ export default function TransactionFormPage() {
       form.reset({
         ...transaction,
         date: new Date(transaction.date),
+        amount: typeof transaction.amount === "string" ? parseFloat(transaction.amount) : transaction.amount,
         clientId: transaction.clientId || undefined,
         invoiceId: transaction.invoiceId || undefined,
+        description: transaction.description || "",
+        type: transaction.type as "income" | "expense",
       });
     }
   }, [transaction, form]);
@@ -124,25 +165,50 @@ export default function TransactionFormPage() {
     const subscription = form.watch((value, { name }) => {
       if (name === "clientId") {
         const clientId = form.getValues("clientId");
-        const client = clients?.find(c => c.id === clientId);
+        if (clientId === undefined || clientId === null) {
+          form.setValue("clientName", "", { shouldValidate: true });
+          return;
+        }
+        const client = clients?.find(c => c.id === Number(clientId));
         if (client) {
-          form.setValue("clientName", client.name);
+          form.setValue("clientName", client.name, { shouldValidate: true });
         }
       }
       
       if (name === "invoiceId") {
         const invoiceId = form.getValues("invoiceId");
-        const invoice = invoices?.find(i => i.id === invoiceId);
+        if (!invoiceId || invoiceId === "none") {
+          form.setValue("invoiceId", undefined, { shouldValidate: true });
+          form.setValue("referenceNumber", "", { shouldValidate: true });
+          return;
+        }
+        const invoice = invoices?.find(i => i.id === Number(invoiceId));
         if (invoice) {
-          form.setValue("referenceNumber", invoice.invoiceNumber);
-          form.setValue("clientId", invoice.clientId);
-          form.setValue("clientName", invoice.clientName || "");
+          form.setValue("referenceNumber", invoice.invoiceNumber, { shouldValidate: true });
+          form.setValue("clientId", invoice.clientId, { shouldValidate: true });
         }
       }
     });
     
     return () => subscription.unsubscribe();
-  }, [form.watch, clients, invoices]);
+  }, [form, clients, invoices]);
+
+  // Update effect to fetch client balance
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "clientId") {
+        const clientId = form.getValues("clientId");
+        if (clientId) {
+          getClientBalance(clientId).then(balance => {
+            setClientBalance(balance);
+          });
+        } else {
+          setClientBalance("0");
+        }
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form.watch]);
 
   // Create/Update mutation
   const mutation = useMutation({
@@ -203,9 +269,55 @@ export default function TransactionFormPage() {
   });
 
   // Form submission handler
-  const onSubmit = (values: FormValues) => {
-    mutation.mutate(values);
+  const onSubmit = async (values: FormValues) => {
+    try {
+      console.log("Submitting values:", values); // Debug log
+      
+      // Prepare the data
+      const submitData = {
+        ...values,
+        date: format(values.date, "yyyy-MM-dd"),
+        type: values.type === "income" ? "income" : "expense",
+        transactionType: values.type === "income" ? "قبض" : "صرف",
+        clientId: values.clientId ? Number(values.clientId) : null,
+        amount: values.amount.toString(), // Ensure amount is string
+      };
+
+      console.log("Submitting data:", submitData); // Debug log
+      await mutation.mutateAsync(submitData);
+    } catch (error) {
+      console.error('Transaction save error:', error);
+      toast({
+        title: "حدث خطأ",
+        description: error instanceof Error ? error.message : "خطأ غير معروف",
+        variant: "destructive",
+      });
+    }
   };
+
+  // Add copy balance button handler
+  const copyBalanceToAmount = () => {
+    form.setValue("amount", Math.abs(parseFloat(clientBalance)), { 
+      shouldValidate: true 
+    });
+  };
+
+  // Add balance display and copy button
+  const balanceSection = (
+    <div className="flex items-center justify-between mt-2">
+      <div className="text-sm">
+        رصيد العميل: {parseFloat(clientBalance).toLocaleString()} جم
+      </div>
+      <Button
+        type="button" 
+        variant="outline"
+        size="sm"
+        onClick={copyBalanceToAmount}
+      >
+        نسخ المبلغ
+      </Button>
+    </div>
+  );
 
   // Loading state
   if (isEditMode && isLoadingTransaction) {
@@ -328,6 +440,7 @@ export default function TransactionFormPage() {
                             <Button
                               variant="outline"
                               className="w-full pr-3 text-right font-normal"
+                              type="button" // Add this to prevent form submission
                             >
                               {field.value ? (
                                 format(field.value, "yyyy/MM/dd", { locale: ar })
@@ -338,12 +451,20 @@ export default function TransactionFormPage() {
                             </Button>
                           </FormControl>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
+                        <PopoverContent className="w-auto p-0" align="end">
                           <Calendar
-                            mode="single"
                             selected={field.value}
-                            onSelect={field.onChange}
+                            onSelect={(date) => {
+                              if (date) {
+                                field.onChange(date);
+                                setMonth(date);
+                              }
+                            }}
+                            month={month}
+                            onMonthChange={setMonth}
                             initialFocus
+                            locale={ar}
+                            disabled={(date) => date > new Date()}
                           />
                         </PopoverContent>
                       </Popover>
@@ -403,62 +524,35 @@ export default function TransactionFormPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>العميل / المورد</FormLabel>
-                      <Select 
-                        onValueChange={(value) => field.onChange(parseInt(value))}
-                        defaultValue={field.value?.toString()}
-                        value={field.value?.toString()}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="اختر العميل" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="">-- بدون عميل --</SelectItem>
-                          {clients?.map(client => (
-                            <SelectItem key={client.id} value={client.id.toString()}>
-                              {client.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <Combobox
+                          options={clientOptions}
+                          value={field.value?.toString() || "none"}
+                          onChange={(value) => {
+                            console.log("Selected client value:", value); // Debug log
+                            if (value === "none") {
+                              field.onChange(undefined);
+                              form.setValue("clientName", "");
+                            } else {
+                              field.onChange(parseInt(value));
+                              const client = clients?.find(c => c.id === parseInt(value));
+                              console.log("Found client:", client); // Debug log
+                              if (client) {
+                                form.setValue("clientName", client.name);
+                              }
+                            }
+                            setSelectedClientId(value);
+                          }}
+                          placeholder="اختر أو ابحث عن عميل..."
+                          emptyMessage="لا يوجد عملاء مطابقين للبحث"
+                          searchPlaceholder="ابحث باسم العميل..."
+                        />
+                      </FormControl>
                       <FormDescription>
-                        العميل أو المورد المرتبط بالمعاملة (اختياري)
+                        {isLoadingClients ? "جاري تحميل العملاء..." : "العميل أو المورد المرتبط بالمعاملة (اختياري)"}
                       </FormDescription>
                       <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="invoiceId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>الفاتورة المرتبطة</FormLabel>
-                      <Select 
-                        onValueChange={(value) => field.onChange(parseInt(value))}
-                        defaultValue={field.value?.toString()}
-                        value={field.value?.toString()}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="اختر الفاتورة" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="">-- بدون فاتورة --</SelectItem>
-                          {invoices?.map(invoice => (
-                            <SelectItem key={invoice.id} value={invoice.id.toString()}>
-                              {invoice.invoiceNumber} - {invoice.clientName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        الفاتورة المرتبطة بالمعاملة (اختياري)
-                      </FormDescription>
-                      <FormMessage />
+                      {balanceSection}
                     </FormItem>
                   )}
                 />
@@ -474,7 +568,8 @@ export default function TransactionFormPage() {
                       <Textarea 
                         placeholder="ملاحظات إضافية (اختياري)" 
                         className="resize-none"
-                        {...field} 
+                        value={field.value || ""}
+                        onChange={field.onChange}
                       />
                     </FormControl>
                     <FormMessage />

@@ -162,6 +162,30 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
 }));
 
+// Balance History table
+export const balanceHistory = pgTable("balance_history", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  transactionId: integer("transaction_id").notNull().references(() => transactions.id, { onDelete: "cascade" }),
+  previousBalance: numeric("previous_balance").notNull().default("0"),
+  amount: numeric("amount").notNull().default("0"),
+  newBalance: numeric("new_balance").notNull().default("0"),
+  type: text("type").notNull(), // credit or debit
+  description: text("description"),
+  date: timestamp("date").defaultNow(),
+});
+
+export const balanceHistoryRelations = relations(balanceHistory, ({ one }) => ({
+  client: one(clients, {
+    fields: [balanceHistory.clientId],
+    references: [clients.id],
+  }),
+  transaction: one(transactions, {
+    fields: [balanceHistory.transactionId],
+    references: [transactions.id],
+  }),
+}));
+
 // Settings table
 export const settings = pgTable("settings", {
   id: serial("id").primaryKey(),
@@ -225,6 +249,10 @@ export const insertSettingsSchema = createInsertSchema(settings).omit({
   id: true,
 });
 
+export const insertBalanceHistorySchema = createInsertSchema(balanceHistory).omit({
+  id: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -249,3 +277,6 @@ export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 
 export type Settings = typeof settings.$inferSelect;
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
+
+export type BalanceHistory = typeof balanceHistory.$inferSelect;
+export type InsertBalanceHistory = z.infer<typeof insertBalanceHistorySchema>;

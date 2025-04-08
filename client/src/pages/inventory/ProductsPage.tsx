@@ -34,21 +34,71 @@ import {
   XCircle,
   CheckCircle
 } from "lucide-react";
-import { Product } from "@shared/schema";
+import { Product, Client } from "@shared/schema";
+import { toast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  
-  const { data: products, isLoading } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+
+  const { data: suppliers } = useQuery<Client[]>({
+    queryKey: ["/api/clients"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/clients");
+      const data = await res.json();
+      // Filter to only get suppliers
+      return data.filter((client: Client) => client.clientType === "مورد");
+    }
   });
 
-  // Filter products based on search query
-  const filteredProducts = products?.filter(product => 
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.category?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const { data: products, isLoading, error } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const [productsRes, clientsRes] = await Promise.all([
+        apiRequest("GET", "/api/products"),
+        apiRequest("GET", "/api/clients")
+      ]);
+
+      const productsData = await productsRes.json();
+      const clientsData = await clientsRes.json();
+      
+      // Filter clients to only get suppliers
+      const suppliers = clientsData.filter((c: Client) => c.clientType === "مورد");
+
+      return productsData.map((product: Product) => {
+        const supplier = suppliers.find(s => s.id === product.supplierId);
+        return {
+          ...product,
+          supplierName: supplier?.name || "غير محدد"
+        };
+      });
+    },
+    enabled: true, // Remove dependency on suppliers query
+    retry: 1,
+    staleTime: 1000,
+    refetchOnWindowFocus: true
+  });
+
+  console.log("Raw products data:", products);
+
+  const filteredProducts = products?.filter(product => {
+    if (!product) return false;
+    
+    return product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           product.category?.toLowerCase().includes(searchQuery.toLowerCase());
+  }) || [];
+
+  console.log("Filtered products:", filteredProducts);
+
+  if (error) {
+    console.error("Error loading products:", error);
+    toast({
+      title: "خطأ في تحميل البيانات",
+      description: error instanceof Error ? error.message : "حدث خطأ أثناء تحميل قائمة المنتجات",
+      variant: "destructive"
+    });
+  }
 
   if (isLoading) {
     return (
