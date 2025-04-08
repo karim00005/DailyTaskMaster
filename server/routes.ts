@@ -454,11 +454,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invoices", async (req: Request, res: Response) => {
     try {
+      console.log("Received invoice data:", req.body);
       const { invoice, items } = req.body;
       
-      const validatedInvoice = insertInvoiceSchema.safeParse(invoice);
+      // Transform invoice data if needed
+      const transformedInvoice = {
+        ...invoice,
+        // Ensure these fields are parsed as strings if they're already not
+        subTotal: invoice.subTotal?.toString() || invoice.subtotal?.toString() || "0",
+        discount: invoice.discount?.toString() || "0",
+        tax: invoice.tax?.toString() || "0",
+        total: invoice.total?.toString() || "0", 
+        paid: invoice.paid?.toString() || "0",
+        due: invoice.due?.toString() || (
+          parseFloat(invoice.total?.toString() || "0") - 
+          parseFloat(invoice.paid?.toString() || "0")
+        ).toString()
+      };
+      
+      const validatedInvoice = insertInvoiceSchema.safeParse(transformedInvoice);
       if (!validatedInvoice.success) {
         const errorMessage = fromZodError(validatedInvoice.error).message;
+        console.error("Invoice validation failed:", errorMessage, validatedInvoice.error);
         return res.status(400).json({ message: errorMessage });
       }
       
@@ -469,35 +486,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedItems = [];
       for (const item of items) {
-        const validatedItem = insertInvoiceItemSchema.omit({ invoiceId: true }).safeParse(item);
+        // Transform item data
+        const transformedItem = {
+          ...item,
+          productId: parseInt(item.productId?.toString() || "0"),
+          quantity: item.quantity?.toString() || "0",
+          price: item.price?.toString() || "0",
+          total: item.total?.toString() || (
+            parseFloat(item.quantity?.toString() || "0") * 
+            parseFloat(item.price?.toString() || "0")
+          ).toString(),
+          discount: item.discount?.toString() || "0",
+          tax: item.tax?.toString() || "0"
+        };
+        
+        const validatedItem = insertInvoiceItemSchema.omit({ invoiceId: true }).safeParse(transformedItem);
         if (!validatedItem.success) {
           const errorMessage = fromZodError(validatedItem.error).message;
+          console.error("Item validation failed:", errorMessage, validatedItem.error);
           return res.status(400).json({ message: errorMessage });
         }
         validatedItems.push(validatedItem.data);
       }
       
+      console.log("Creating invoice with data:", validatedInvoice.data, "and items:", validatedItems);
       const newInvoice = await storage.createInvoice(validatedInvoice.data, validatedItems);
       res.status(201).json(newInvoice);
     } catch (error) {
       console.error("Error creating invoice:", error);
-      res.status(500).json({ message: "Failed to create invoice" });
+      res.status(500).json({ message: "Failed to create invoice", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.patch("/api/invoices/:id", async (req: Request, res: Response) => {
     try {
+      console.log("Received invoice update data:", req.body);
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid invoice ID" });
       }
       
-      const validatedData = insertInvoiceSchema.partial().safeParse(req.body);
+      // Transform invoice data if needed
+      const invoice = req.body;
+      const transformedInvoice = {
+        ...invoice,
+        // Ensure these fields are parsed as strings if they're already not
+        subTotal: invoice.subTotal?.toString() || invoice.subtotal?.toString() || undefined,
+        discount: invoice.discount?.toString() || undefined,
+        tax: invoice.tax?.toString() || undefined,
+        total: invoice.total?.toString() || undefined, 
+        paid: invoice.paid?.toString() || undefined,
+        due: invoice.due?.toString() || (
+          invoice.total !== undefined && invoice.paid !== undefined
+            ? (parseFloat(invoice.total.toString()) - parseFloat(invoice.paid.toString())).toString()
+            : undefined
+        )
+      };
+      
+      const validatedData = insertInvoiceSchema.partial().safeParse(transformedInvoice);
       if (!validatedData.success) {
         const errorMessage = fromZodError(validatedData.error).message;
+        console.error("Invoice validation failed:", errorMessage, validatedData.error);
         return res.status(400).json({ message: errorMessage });
       }
       
+      console.log("Updating invoice with data:", validatedData.data);
       const updatedInvoice = await storage.updateInvoice(id, validatedData.data);
       if (!updatedInvoice) {
         return res.status(404).json({ message: "Invoice not found" });
@@ -506,7 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedInvoice);
     } catch (error) {
       console.error("Error updating invoice:", error);
-      res.status(500).json({ message: "Failed to update invoice" });
+      res.status(500).json({ message: "Failed to update invoice", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -547,34 +600,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/invoice-items", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertInvoiceItemSchema.safeParse(req.body);
+      console.log("Received invoice item data:", req.body);
       
+      // Transform the data to ensure correct types
+      const item = req.body;
+      const transformedItem = {
+        ...item,
+        invoiceId: parseInt(item.invoiceId.toString()),
+        productId: parseInt(item.productId.toString()),
+        quantity: item.quantity?.toString() || "0",
+        price: item.price?.toString() || "0",
+        total: item.total?.toString() || (
+          parseFloat(item.quantity?.toString() || "0") * 
+          parseFloat(item.price?.toString() || "0")
+        ).toString(),
+        discount: item.discount?.toString() || "0",
+        tax: item.tax?.toString() || "0"
+      };
+      
+      const validatedData = insertInvoiceItemSchema.safeParse(transformedItem);
       if (!validatedData.success) {
         const errorMessage = fromZodError(validatedData.error).message;
+        console.error("Item validation failed:", errorMessage, validatedData.error);
         return res.status(400).json({ message: errorMessage });
       }
       
+      console.log("Creating invoice item with data:", validatedData.data);
       const newItem = await storage.createInvoiceItem(validatedData.data);
       res.status(201).json(newItem);
     } catch (error) {
       console.error("Error creating invoice item:", error);
-      res.status(500).json({ message: "Failed to create invoice item" });
+      res.status(500).json({ message: "Failed to create invoice item", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.patch("/api/invoice-items/:id", async (req: Request, res: Response) => {
     try {
+      console.log("Received invoice item update data:", req.body);
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid item ID" });
       }
       
-      const validatedData = insertInvoiceItemSchema.partial().safeParse(req.body);
+      // Transform item data
+      const item = req.body;
+      const transformedItem = {
+        ...item,
+        productId: item.productId !== undefined ? parseInt(item.productId.toString()) : undefined,
+        quantity: item.quantity?.toString(),
+        price: item.price?.toString(),
+        total: item.total?.toString() || (
+          item.quantity !== undefined && item.price !== undefined
+            ? (parseFloat(item.quantity.toString()) * parseFloat(item.price.toString())).toString()
+            : undefined
+        ),
+        discount: item.discount?.toString(),
+        tax: item.tax?.toString()
+      };
+      
+      const validatedData = insertInvoiceItemSchema.partial().safeParse(transformedItem);
       if (!validatedData.success) {
         const errorMessage = fromZodError(validatedData.error).message;
+        console.error("Item validation failed:", errorMessage, validatedData.error);
         return res.status(400).json({ message: errorMessage });
       }
       
+      console.log("Updating invoice item with data:", validatedData.data);
       const updatedItem = await storage.updateInvoiceItem(id, validatedData.data);
       if (!updatedItem) {
         return res.status(404).json({ message: "Invoice item not found" });
@@ -583,7 +674,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedItem);
     } catch (error) {
       console.error("Error updating invoice item:", error);
-      res.status(500).json({ message: "Failed to update invoice item" });
+      res.status(500).json({ message: "Failed to update invoice item", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -655,34 +746,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/transactions", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertTransactionSchema.safeParse(req.body);
+      console.log("Received transaction data:", req.body);
       
+      // Transform the data to ensure correct types
+      const transaction = req.body;
+      const transformedTransaction = {
+        ...transaction,
+        clientId: transaction.clientId ? parseInt(transaction.clientId.toString()) : null,
+        invoiceId: transaction.invoiceId ? parseInt(transaction.invoiceId.toString()) : null,
+        userId: transaction.userId ? parseInt(transaction.userId.toString()) : null,
+        amount: transaction.amount?.toString() || "0",
+        description: transaction.description?.toString() || "",
+        transactionNumber: transaction.transactionNumber?.toString() || "",
+        transactionType: transaction.transactionType?.toString() || transaction.type?.toString() || "",
+        date: transaction.date?.toString() || new Date().toISOString().split('T')[0],
+        notes: transaction.notes?.toString() || null,
+        paymentMethod: transaction.paymentMethod?.toString() || "cash",
+        referenceNumber: transaction.referenceNumber?.toString() || null
+      };
+      
+      const validatedData = insertTransactionSchema.safeParse(transformedTransaction);
       if (!validatedData.success) {
         const errorMessage = fromZodError(validatedData.error).message;
+        console.error("Transaction validation failed:", errorMessage, validatedData.error);
         return res.status(400).json({ message: errorMessage });
       }
       
+      console.log("Creating transaction with data:", validatedData.data);
       const newTransaction = await storage.createTransaction(validatedData.data);
       res.status(201).json(newTransaction);
     } catch (error) {
       console.error("Error creating transaction:", error);
-      res.status(500).json({ message: "Failed to create transaction" });
+      res.status(500).json({ message: "Failed to create transaction", error: error instanceof Error ? error.message : String(error) });
     }
   });
 
   app.patch("/api/transactions/:id", async (req: Request, res: Response) => {
     try {
+      console.log("Received transaction update data:", req.body);
       const id = parseInt(req.params.id);
       if (isNaN(id)) {
         return res.status(400).json({ message: "Invalid transaction ID" });
       }
       
-      const validatedData = insertTransactionSchema.partial().safeParse(req.body);
+      // Transform the data to ensure correct types
+      const transaction = req.body;
+      const transformedTransaction = {
+        ...transaction,
+        clientId: transaction.clientId !== undefined ? 
+          (transaction.clientId === null ? null : parseInt(transaction.clientId.toString())) : undefined,
+        invoiceId: transaction.invoiceId !== undefined ? 
+          (transaction.invoiceId === null ? null : parseInt(transaction.invoiceId.toString())) : undefined,
+        userId: transaction.userId !== undefined ? 
+          (transaction.userId === null ? null : parseInt(transaction.userId.toString())) : undefined,
+        amount: transaction.amount !== undefined ? transaction.amount.toString() : undefined,
+        description: transaction.description?.toString(),
+        transactionNumber: transaction.transactionNumber?.toString(),
+        transactionType: transaction.transactionType?.toString() || transaction.type?.toString(),
+        date: transaction.date?.toString(),
+        notes: transaction.notes !== undefined ? 
+          (transaction.notes === null ? null : transaction.notes.toString()) : undefined,
+        paymentMethod: transaction.paymentMethod?.toString(),
+        referenceNumber: transaction.referenceNumber !== undefined ? 
+          (transaction.referenceNumber === null ? null : transaction.referenceNumber.toString()) : undefined
+      };
+      
+      const validatedData = insertTransactionSchema.partial().safeParse(transformedTransaction);
       if (!validatedData.success) {
         const errorMessage = fromZodError(validatedData.error).message;
+        console.error("Transaction validation failed:", errorMessage, validatedData.error);
         return res.status(400).json({ message: errorMessage });
       }
       
+      console.log("Updating transaction with data:", validatedData.data);
       const updatedTransaction = await storage.updateTransaction(id, validatedData.data);
       if (!updatedTransaction) {
         return res.status(404).json({ message: "Transaction not found" });
@@ -691,7 +827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedTransaction);
     } catch (error) {
       console.error("Error updating transaction:", error);
-      res.status(500).json({ message: "Failed to update transaction" });
+      res.status(500).json({ message: "Failed to update transaction", error: error instanceof Error ? error.message : String(error) });
     }
   });
 

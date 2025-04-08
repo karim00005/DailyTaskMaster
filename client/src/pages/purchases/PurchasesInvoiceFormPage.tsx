@@ -1,47 +1,40 @@
-import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link, useLocation, useParams } from "wouter";
+import { useState, useEffect } from "react";
+import { useParams, useLocation } from "wouter";
 import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, useFieldArray } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Combobox } from "@/components/ui/combobox";
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardFooter, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card";
-import { 
-  Form, 
-  FormControl, 
-  FormDescription,
-  FormField, 
-  FormItem, 
-  FormLabel, 
-  FormMessage 
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
   TableHeader,
-  TableRow 
+  TableRow,
 } from "@/components/ui/table";
-import { 
+import { Link } from "wouter";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -51,12 +44,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
-} from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { 
@@ -125,7 +112,6 @@ export default function PurchasesInvoiceFormPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const isEditMode = Boolean(id);
-  const [activeTab, setActiveTab] = useState("details");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [productQuantity, setProductQuantity] = useState(1);
@@ -157,7 +143,6 @@ export default function PurchasesInvoiceFormPage() {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      type: "purchase",
       invoiceNumber: generateInvoiceNumber(),
       clientId: 0,
       clientName: "",
@@ -240,26 +225,23 @@ export default function PurchasesInvoiceFormPage() {
   useEffect(() => {
     if (invoice && invoice.items) {
       form.reset({
-        type: "purchase",
         invoiceNumber: invoice.invoiceNumber,
-        clientId: invoice.clientId,
-        clientName: invoice.clientName || "",
+        clientId: invoice.clientId || 0,
+        clientName: "",
         date: new Date(invoice.date),
-        dueDate: invoice.dueDate ? new Date(invoice.dueDate) : undefined,
-        subtotal: invoice.subtotal,
-        discount: invoice.discount || 0,
-        tax: invoice.tax || 0,
-        total: invoice.total,
-        paid: invoice.paid || 0,
+        subtotal: parseFloat(invoice.subTotal) || 0,
+        discount: parseFloat(invoice.discount || "0") || 0,
+        tax: parseFloat(invoice.tax || "0") || 0,
+        total: parseFloat(invoice.total) || 0,
+        paid: parseFloat(invoice.paid || "0") || 0,
         notes: invoice.notes || "",
         items: invoice.items.map(item => ({
-          id: item.id,
-          invoiceId: item.invoiceId,
-          productId: item.productId,
-          productName: item.productName || "",
-          quantity: item.quantity,
-          price: item.price,
-          total: item.total,
+          invoiceId: item.invoiceId || 0,
+          productId: item.productId || 0,
+          productName: "",
+          quantity: parseFloat(item.quantity) || 0,
+          price: parseFloat(item.price) || 0,
+          total: parseFloat(item.total) || 0,
         })),
       });
     }
@@ -283,7 +265,7 @@ export default function PurchasesInvoiceFormPage() {
   // Update product price when product is selected
   useEffect(() => {
     if (selectedProduct) {
-      setProductPrice(selectedProduct.price || 0);
+      setProductPrice(parseFloat(selectedProduct.buyPrice) || 0);
     }
   }, [selectedProduct]);
 
@@ -294,17 +276,17 @@ export default function PurchasesInvoiceFormPage() {
         invoice: {
           invoiceNumber: data.invoiceNumber,
           clientId: data.clientId,
-          date: data.date,
-          dueDate: data.dueDate,
-          invoiceType: "فاتورة شراء", // نوع الفاتورة مشتريات
-          status: "تم التسليم",
-          subTotal: data.subtotal,
-          discount: data.discount || 0,
-          tax: data.tax || 0,
-          total: data.total,
-          paid: data.paid || 0,
+          date: format(data.date, "yyyy-MM-dd"),
+          invoiceType: "purchases", // نوع الفاتورة مشتريات
+          status: "pending",
+          paymentMethod: "cash",
+          subTotal: data.subtotal.toString(),
+          discount: data.discount.toString(),
+          tax: data.tax.toString(),
+          total: data.total.toString(),
+          paid: data.paid.toString(),
           due: (data.total - (data.paid || 0)).toString(),
-          notes: data.notes
+          notes: data.notes || ""
         },
         items: data.items.map(item => ({
           productId: item.productId,
@@ -315,6 +297,8 @@ export default function PurchasesInvoiceFormPage() {
           tax: "0"
         }))
       };
+
+      console.log("Submitting invoice data:", formattedData);
 
       if (isEditMode) {
         // Update existing invoice
@@ -408,438 +392,384 @@ export default function PurchasesInvoiceFormPage() {
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)}>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-6">
-              <TabsTrigger value="details">تفاصيل الفاتورة</TabsTrigger>
-              <TabsTrigger value="items">المنتجات</TabsTrigger>
-              <TabsTrigger value="payment">الدفع والملاحظات</TabsTrigger>
-            </TabsList>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Invoice Details Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>معلومات الفاتورة الأساسية</CardTitle>
+                <CardDescription>
+                  أدخل بيانات الفاتورة والمورد
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="invoiceNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>رقم الفاتورة *</FormLabel>
+                        <FormControl>
+                          <Input placeholder="رقم الفاتورة" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            <TabsContent value="details">
-              <Card>
-                <CardHeader>
-                  <CardTitle>معلومات الفاتورة الأساسية</CardTitle>
-                  <CardDescription>
-                    أدخل بيانات الفاتورة والمورد
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="invoiceNumber"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>رقم الفاتورة *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="رقم الفاتورة" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                  <FormField
+                    control={form.control}
+                    name="clientId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>المورد *</FormLabel>
+                        <FormControl>
+                          <Combobox
+                            options={clients?.map(client => ({
+                              value: client.id.toString(),
+                              label: client.name
+                            })) || []}
+                            value={field.value?.toString() || ""}
+                            onChange={(value) => field.onChange(parseInt(value))}
+                            placeholder="اختر المورد"
+                            emptyMessage="لا يوجد موردين مطابقين"
+                            searchPlaceholder="ابحث عن مورد..."
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                    <FormField
-                      control={form.control}
-                      name="clientId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>المورد *</FormLabel>
-                          <FormControl>
-                            <Combobox
-                              options={clients?.map(client => ({
-                                value: client.id.toString(),
-                                label: client.name
-                              })) || []}
-                              value={field.value?.toString() || ""}
-                              onChange={(value) => field.onChange(parseInt(value))}
-                              placeholder="اختر المورد"
-                              emptyMessage="لا يوجد موردين مطابقين"
-                              searchPlaceholder="ابحث عن مورد..."
+                  <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>تاريخ الفاتورة *</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={"outline"}
+                                className="w-full pr-3 text-right font-normal"
+                              >
+                                {field.value ? (
+                                  format(field.value, "yyyy/MM/dd", { locale: ar })
+                                ) : (
+                                  <span>اختر التاريخ</span>
+                                )}
+                                <CalendarIcon className="mr-auto h-4 w-4" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
                             />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="date"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>تاريخ الفاتورة *</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant={"outline"}
-                                  className="w-full pr-3 text-right font-normal"
-                                >
-                                  {field.value ? (
-                                    format(field.value, "yyyy/MM/dd", { locale: ar })
-                                  ) : (
-                                    <span>اختر التاريخ</span>
-                                  )}
-                                  <CalendarIcon className="mr-auto h-4 w-4" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+            {/* Payment & Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle>الدفع والملاحظات</CardTitle>
+                <CardDescription>
+                  أدخل معلومات الدفع وأي ملاحظات إضافية
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="paid"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>المبلغ المدفوع</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="أدخل المبلغ المدفوع" 
+                          {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        إجمالي الفاتورة: {form.getValues("total")?.toLocaleString()} جم
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                    <FormField
-                      control={form.control}
-                      name="dueDate"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-col">
-                          <FormLabel>تاريخ الاستحقاق</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <FormControl>
-                                <Button
-                                  variant={"outline"}
-                                  className="w-full pr-3 text-right font-normal"
-                                >
-                                  {field.value ? (
-                                    format(field.value, "yyyy/MM/dd", { locale: ar })
-                                  ) : (
-                                    <span>اختر التاريخ</span>
-                                  )}
-                                  <CalendarIcon className="mr-auto h-4 w-4" />
-                                </Button>
-                              </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                initialFocus
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                <FormField
+                  control={form.control}
+                  name="notes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ملاحظات</FormLabel>
+                      <FormControl>
+                        <Input placeholder="ملاحظات إضافية حول الفاتورة" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Products Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle>المنتجات</CardTitle>
+              <CardDescription>
+                أضف المنتجات إلى الفاتورة
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Add Product Form */}
+              <Card>
+                <CardContent className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                    <div className="space-y-2">
+                      <Label htmlFor="product">المنتج</Label>
+                      <Combobox
+                        options={products?.map(product => ({
+                          value: product.id.toString(),
+                          label: product.name
+                        })) || []}
+                        value={selectedProduct?.id?.toString() || ""}
+                        onChange={(value) => {
+                          const product = products?.find(p => p.id === parseInt(value));
+                          setSelectedProduct(product || null);
+                        }}
+                        placeholder="اختر المنتج"
+                        emptyMessage="لا توجد منتجات مطابقة"
+                        searchPlaceholder="ابحث عن منتج..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity">الكمية</Label>
+                      <Input 
+                        id="quantity"
+                        type="number"
+                        min="1"
+                        value={productQuantity}
+                        onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="price">السعر</Label>
+                      <Input 
+                        id="price"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={productPrice}
+                        onChange={(e) => setProductPrice(parseFloat(e.target.value) || 0)}
+                      />
+                    </div>
+                    <Button 
+                      type="button"
+                      onClick={addProduct} 
+                      disabled={!selectedProduct}
+                    >
+                      <Plus className="h-4 w-4 ml-2" />
+                      إضافة
+                    </Button>
                   </div>
                 </CardContent>
-                <CardFooter className="justify-between">
-                  <Button variant="outline" onClick={() => setActiveTab("items")}>
-                    إلغاء
-                  </Button>
-                  <Button onClick={() => setActiveTab("items")}>
-                    التالي: المنتجات
-                  </Button>
-                </CardFooter>
               </Card>
-            </TabsContent>
 
-            <TabsContent value="items">
-              <Card>
-                <CardHeader>
-                  <CardTitle>المنتجات</CardTitle>
-                  <CardDescription>
-                    أضف المنتجات إلى الفاتورة
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Add Product Form */}
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div className="space-y-2">
-                          <Label htmlFor="product">المنتج</Label>
-                          <Combobox
-                            options={products?.map(product => ({
-                              value: product.id.toString(),
-                              label: product.name
-                            })) || []}
-                            value={selectedProduct?.id?.toString() || ""}
-                            onChange={(value) => {
-                              const product = products?.find(p => p.id === parseInt(value));
-                              setSelectedProduct(product || null);
-                            }}
-                            placeholder="اختر المنتج"
-                            emptyMessage="لا توجد منتجات مطابقة"
-                            searchPlaceholder="ابحث عن منتج..."
+              {/* Items Table */}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>المنتج</TableHead>
+                    <TableHead>الكمية</TableHead>
+                    <TableHead>السعر</TableHead>
+                    <TableHead>الإجمالي</TableHead>
+                    <TableHead className="w-[80px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {fields.length > 0 ? (
+                    fields.map((item, index) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{index + 1}</TableCell>
+                        <TableCell>
+                          <input
+                            type="hidden"
+                            {...form.register(`items.${index}.productId` as const)}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="quantity">الكمية</Label>
-                          <Input 
-                            id="quantity"
+                          <input
+                            type="hidden"
+                            {...form.register(`items.${index}.productName` as const)}
+                          />
+                          {item.productName}
+                        </TableCell>
+                        <TableCell>
+                          <Input
                             type="number"
                             min="1"
-                            value={productQuantity}
-                            onChange={(e) => setProductQuantity(parseInt(e.target.value) || 1)}
+                            className="w-20"
+                            {...form.register(`items.${index}.quantity` as const, {
+                              valueAsNumber: true,
+                              onChange: (e) => {
+                                const qty = parseInt(e.target.value) || 0;
+                                const price = form.getValues(`items.${index}.price`);
+                                form.setValue(`items.${index}.total`, qty * price);
+                                calculateTotals();
+                              },
+                            })}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="price">السعر</Label>
-                          <Input 
-                            id="price"
+                        </TableCell>
+                        <TableCell>
+                          <Input
                             type="number"
                             min="0"
                             step="0.01"
-                            value={productPrice}
-                            onChange={(e) => setProductPrice(parseFloat(e.target.value) || 0)}
+                            className="w-28"
+                            {...form.register(`items.${index}.price` as const, {
+                              valueAsNumber: true,
+                              onChange: (e) => {
+                                const price = parseFloat(e.target.value) || 0;
+                                const qty = form.getValues(`items.${index}.quantity`);
+                                form.setValue(`items.${index}.total`, qty * price);
+                                calculateTotals();
+                              },
+                            })}
                           />
-                        </div>
-                        <Button 
-                          onClick={addProduct} 
-                          disabled={!selectedProduct}
-                        >
-                          <Plus className="h-4 w-4 ml-2" />
-                          إضافة
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Items Table */}
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>#</TableHead>
-                        <TableHead>المنتج</TableHead>
-                        <TableHead>الكمية</TableHead>
-                        <TableHead>السعر</TableHead>
-                        <TableHead>الإجمالي</TableHead>
-                        <TableHead className="w-[80px]"></TableHead>
+                        </TableCell>
+                        <TableCell>
+                          <input
+                            type="hidden"
+                            {...form.register(`items.${index}.total` as const, {
+                              valueAsNumber: true,
+                            })}
+                          />
+                          {item.total?.toLocaleString()} جم
+                        </TableCell>
+                        <TableCell>
+                          <Button 
+                            type="button"
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => {
+                              remove(index);
+                              calculateTotals();
+                            }}
+                          >
+                            <Trash className="h-4 w-4 text-red-500" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {fields.length > 0 ? (
-                        fields.map((item, index) => (
-                          <TableRow key={item.id}>
-                            <TableCell>{index + 1}</TableCell>
-                            <TableCell>
-                              <input
-                                type="hidden"
-                                {...form.register(`items.${index}.productId` as const)}
-                              />
-                              <input
-                                type="hidden"
-                                {...form.register(`items.${index}.productName` as const)}
-                              />
-                              {item.productName}
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                min="1"
-                                className="w-20"
-                                {...form.register(`items.${index}.quantity` as const, {
-                                  valueAsNumber: true,
-                                  onChange: (e) => {
-                                    const qty = parseInt(e.target.value) || 0;
-                                    const price = form.getValues(`items.${index}.price`);
-                                    form.setValue(`items.${index}.total`, qty * price);
-                                    calculateTotals();
-                                  },
-                                })}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                className="w-28"
-                                {...form.register(`items.${index}.price` as const, {
-                                  valueAsNumber: true,
-                                  onChange: (e) => {
-                                    const price = parseFloat(e.target.value) || 0;
-                                    const qty = form.getValues(`items.${index}.quantity`);
-                                    form.setValue(`items.${index}.total`, qty * price);
-                                    calculateTotals();
-                                  },
-                                })}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <input
-                                type="hidden"
-                                {...form.register(`items.${index}.total` as const, {
-                                  valueAsNumber: true,
-                                })}
-                              />
-                              {item.total?.toLocaleString()} جم
-                            </TableCell>
-                            <TableCell>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => {
-                                  remove(index);
-                                  calculateTotals();
-                                }}
-                              >
-                                <Trash className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
-                            لم يتم إضافة منتجات بعد
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                        لم يتم إضافة منتجات بعد
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
 
-                  {/* Totals */}
-                  <div className="flex flex-col items-end space-y-2">
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="font-semibold">المجموع الفرعي:</div>
-                      <div className="text-left">
-                        <input
-                          type="hidden"
-                          {...form.register("subtotal", { valueAsNumber: true })}
-                        />
-                        {form.getValues("subtotal")?.toLocaleString()} جم
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="font-semibold">الخصم:</div>
-                      <div className="text-left">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="w-28 h-7 text-xs"
-                          {...form.register("discount", {
-                            valueAsNumber: true,
-                            onChange: () => calculateTotals(),
-                          })}
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="font-semibold">الضريبة:</div>
-                      <div className="text-left">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          className="w-28 h-7 text-xs"
-                          {...form.register("tax", {
-                            valueAsNumber: true,
-                            onChange: () => calculateTotals(),
-                          })}
-                        />
-                      </div>
-                    </div>
-                    <Separator className="my-2" />
-                    <div className="grid grid-cols-2 gap-2 font-bold">
-                      <div>الإجمالي:</div>
-                      <div className="text-left">
-                        <input
-                          type="hidden"
-                          {...form.register("total", { valueAsNumber: true })}
-                        />
-                        {form.getValues("total")?.toLocaleString()} جم
-                      </div>
-                    </div>
+              {/* Totals */}
+              <div className="flex flex-col items-end space-y-2">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="font-semibold">المجموع الفرعي:</div>
+                  <div className="text-left">
+                    <input
+                      type="hidden"
+                      {...form.register("subtotal", { valueAsNumber: true })}
+                    />
+                    {form.getValues("subtotal")?.toLocaleString()} جم
                   </div>
-                </CardContent>
-                <CardFooter className="justify-between">
-                  <Button variant="outline" onClick={() => setActiveTab("details")}>
-                    السابق: التفاصيل
-                  </Button>
-                  <Button onClick={() => setActiveTab("payment")}>
-                    التالي: الدفع والملاحظات
-                  </Button>
-                </CardFooter>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="payment">
-              <Card>
-                <CardHeader>
-                  <CardTitle>معلومات الدفع والملاحظات</CardTitle>
-                  <CardDescription>
-                    أدخل معلومات الدفع وأي ملاحظات إضافية
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="paid"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>المبلغ المدفوع</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="أدخل المبلغ المدفوع" 
-                            {...field}
-                            onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          إجمالي الفاتورة: {form.getValues("total")?.toLocaleString()} جم
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>ملاحظات</FormLabel>
-                        <FormControl>
-                          <Input placeholder="ملاحظات إضافية حول الفاتورة" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-                <CardFooter className="justify-between">
-                  <Button variant="outline" onClick={() => setActiveTab("items")}>
-                    السابق: المنتجات
-                  </Button>
-                  <Button type="submit" disabled={mutation.isPending}>
-                    {mutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                        جاري الحفظ...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 ml-2" />
-                        حفظ الفاتورة
-                      </>
-                    )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="font-semibold">الخصم:</div>
+                  <div className="text-left">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-28 h-7 text-xs"
+                      {...form.register("discount", {
+                        valueAsNumber: true,
+                        onChange: () => calculateTotals(),
+                      })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="font-semibold">الضريبة:</div>
+                  <div className="text-left">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-28 h-7 text-xs"
+                      {...form.register("tax", {
+                        valueAsNumber: true,
+                        onChange: () => calculateTotals(),
+                      })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm font-bold">
+                  <div>الإجمالي:</div>
+                  <div className="text-left">
+                    <input
+                      type="hidden"
+                      {...form.register("total", { valueAsNumber: true })}
+                    />
+                    {form.getValues("total")?.toLocaleString()} جم
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="font-semibold">المدفوع:</div>
+                  <div className="text-left">
+                    {form.getValues("paid")?.toLocaleString()} جم
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-sm font-bold text-red-500">
+                  <div>المتبقي:</div>
+                  <div className="text-left">
+                    {(form.getValues("total") - form.getValues("paid"))?.toLocaleString()} جم
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-end">
+              <Button type="submit" disabled={mutation.isPending} className="w-[200px]">
+                {mutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                    جاري الحفظ...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 ml-2" />
+                    {isEditMode ? "تحديث الفاتورة" : "حفظ الفاتورة"}
+                  </>
+                )}
+              </Button>
+            </CardFooter>
+          </Card>
         </form>
       </Form>
 
@@ -849,21 +779,23 @@ export default function PurchasesInvoiceFormPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>هل أنت متأكد من حذف هذه الفاتورة؟</AlertDialogTitle>
             <AlertDialogDescription>
-              سيتم حذف الفاتورة وجميع بنودها بشكل نهائي. لا يمكن التراجع عن هذا الإجراء.
+              سيتم حذف الفاتورة بشكل نهائي ولا يمكن التراجع عن هذا الإجراء.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>إلغاء</AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={() => deleteMutation.mutate()}
-              className="bg-red-600 hover:bg-red-700"
+            <AlertDialogAction
+              className="bg-red-500 hover:bg-red-600"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                deleteMutation.mutate();
+              }}
+              disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                  جاري الحذف...
-                </>
-              ) : "حذف"}
+              {deleteMutation.isPending && (
+                <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+              )}
+              حذف
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
